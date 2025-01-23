@@ -11,6 +11,7 @@ from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 
 from LabelSeg.dataset.labelseg_data_module import LabelSegDataModule
 from LabelSeg.models.labelseg import LabelSeg
+from LabelSeg.models.utils import get_model
 
 # Set the default precision to float32 to
 # speed up training and reduce memory usage
@@ -65,6 +66,12 @@ def _build_arg_parser():
                          help='Warmup epochs.')
     learn_g.add_argument('--frequency_t', type=float, default=10,
                          help='Cosine LR frequency.')
+    learn_g.add_argument('--pretrain', action='store_true',
+                         help='Pretraining')
+    learn_g.add_argument('--ds', action='store_true',
+                         help='Deep supervision.')
+    learn_g.add_argument('--checkpoint', type=str,
+                         help='Deep supervision.')
     return parser
 
 
@@ -76,14 +83,16 @@ def train(args, root_dir):
             args.data,
             wm_drop_ratio=args.wm_drop_ratio,
             bundles=args.bundles,
-            batch_size=args.batch_size, num_workers=args.num_workers)
+            batch_size=args.batch_size, num_workers=args.num_workers,
+            pretrain=args.pretrain)
     elif len(args.data) == 3:
         train_data, val_data, test_data = args.data
         dm = LabelSegDataModule(
             train_data, val_data, test_data,
             wm_drop_ratio=args.wm_drop_ratio,
             bundles=args.bundles,
-            batch_size=args.batch_size, num_workers=args.num_workers)
+            batch_size=args.batch_size, num_workers=args.num_workers,
+            pretrain=args.pretrain)
     else:
         raise ValueError('Data arg must be 1 or 3 parameters.')
 
@@ -122,14 +131,19 @@ def train(args, root_dir):
         precision='bf16-true',
         callbacks=[lr_monitor, early_stop_callback])
 
-    model = LabelSeg(
-        prompt_strategy=args.prompt_strategy,
-        volume_size=args.volume_size,
-        bundles=args.bundles,
-        lr=args.lr,
-        betas=(args.beta1, args.beta2),
-        weight_decay=args.weight_decay,
-        warmup_t=args.warmup_t)
+    if args.checkpoint:
+        model = get_model(args.checkpoint, {'pretrained': True})
+        model.train()
+    else:
+        model = LabelSeg(
+            prompt_strategy=args.prompt_strategy,
+            volume_size=args.volume_size,
+            bundles=args.bundles,
+            lr=args.lr,
+            betas=(args.beta1, args.beta2),
+            weight_decay=args.weight_decay,
+            warmup_t=args.warmup_t,
+            ds=args.ds)
 
     # # Train the model
     trainer.fit(model, dm)

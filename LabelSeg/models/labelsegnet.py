@@ -9,6 +9,7 @@ from LabelSeg.models.encodings import PositionalEncodingPermute3D
 
 # TODO: Cite MedSAM3D
 
+
 class MLPBlock3D(nn.Module):
     def __init__(
         self,
@@ -249,14 +250,14 @@ class EncoderNextLayer(nn.ModuleList):
 class UNextEncoder(nn.Module):
     """ MedNeXt encoder with 4 encoder layers. """
 
-    def __init__(self):
+    def __init__(self, channels=[32, 64, 128, 256, 512]):
         super().__init__()
 
         self.layers = nn.ModuleList([
-            EncoderNextLayer(32, 64, ratio=2),
-            EncoderNextLayer(64, 128, ratio=3),
-            EncoderNextLayer(128, 256, ratio=4),
-            EncoderNextLayer(256, 512, ratio=4),
+            EncoderNextLayer(channels[0], channels[1], ratio=2),
+            EncoderNextLayer(channels[1], channels[2], ratio=3),
+            EncoderNextLayer(channels[2], channels[3], ratio=4),
+            EncoderNextLayer(channels[3], channels[4], ratio=4),
         ])
 
 
@@ -379,17 +380,19 @@ class DecoderNextLayer(nn.Module):
 class LabelSegNetDecoder(nn.Module):
     """ MedNeXt decoder with 4 decoder layers. """
 
-    def __init__(self, prompt_strategy='add'):
+    def __init__(
+        self, prompt_strategy='add', channels=[512, 256, 128, 64, 32]
+    ):
         super().__init__()
 
         self.layers = nn.ModuleList([
-            DecoderNextLayer(512, 256, ratio=4,
+            DecoderNextLayer(channels[0], channels[1], ratio=4,
                              prompt_strategy=prompt_strategy),
-            DecoderNextLayer(256, 128, ratio=4,
+            DecoderNextLayer(channels[1], channels[2], ratio=4,
                              prompt_strategy=prompt_strategy),
-            DecoderNextLayer(128, 64, ratio=3,
+            DecoderNextLayer(channels[2], channels[3], ratio=3,
                              prompt_strategy=prompt_strategy),
-            DecoderNextLayer(64, 32, ratio=2,
+            DecoderNextLayer(channels[3], channels[4], ratio=2,
                              prompt_strategy=prompt_strategy),
         ])
 
@@ -455,6 +458,8 @@ class LabelSegNet(nn.Module):
                  embed_dim=32, bottleneck_dim=512, n_bundles=72):
         super().__init__()
 
+        self.channels = [32, 64, 128, 256, 512]
+
         self.prompt_strategy = prompt_strategy
         self.volume_size = volume_size
 
@@ -462,11 +467,12 @@ class LabelSegNet(nn.Module):
         self.stem = Stem(in_chans, embed_dim)
         self.mask_stem = Stem(1, embed_dim)
 
-        self.encoder = UNextEncoder()
-        self.mask_encoder = UNextEncoder()
+        self.encoder = UNextEncoder(self.channels)
+        self.mask_encoder = UNextEncoder(self.channels)
 
         self.bottleneck = ConvNextBlock(bottleneck_dim, ratio=4)
-        self.decoder = LabelSegNetDecoder(prompt_strategy)
+        self.decoder = LabelSegNetDecoder(prompt_strategy,
+                                          channels=self.channels[::-1])
         # self.head = Head(embed_dim)
 
         self.prompt_embedding = nn.Sequential(
@@ -514,6 +520,60 @@ class LabelSegNet(nn.Module):
         # prompt information and therefore cannot know which
         # bundle to predict
         z = self.bottleneck(x)
+
+        # Run the decoder
+        # Decoder layers are run in reverse order to match the
+        # encoder features. Deep supervision heads produce smaller
+        # versions of the final output
+        z, ds_outs = self.decoder(
+            z, encoder_features[::-1], prompt_embed, mask_features[::-1])
+
+        return ds_outs
+
+    def encode(self, fodf, wm_prompt=None):
+        """ Forward pass of the model's encoder. """
+        B, C, X, Y, Z = fodf.shape
+
+        # Embed the input fodf
+        input_embedding = self.stem(fodf)
+
+        # Embded the "dense" mask if it is provided
+        # Else, use the learned embedding
+        # TODO: Is it actually necessary to support the no mask case?
+        if torch.sum(wm_prompt) == 0:
+            dense_embeddings = self.no_mask_embed.weight.reshape(
+                1, -1, 1, 1, 1).expand(
+                    B, -1, X, Y, Z)
+        else:
+            dense_embeddings = self.mask_stem(wm_prompt)
+
+        # Run the encoders for the input fodf and the mask
+        # TODO: Consider using a single encoder for both ?
+        encoder_features = []
+        mask_features = []
+
+        x = input_embedding
+        for encoder_layer in self.encoder.layers:
+            x, x_res = encoder_layer(x)
+            encoder_features.append(x_res)
+
+        m = dense_embeddings
+        for mask_encoder_layers in self.mask_encoder.layers:
+            m, m_res = mask_encoder_layers(m)
+            mask_features.append(m_res)
+
+        # As opposed to the original MedNeXt, we do not use deep
+        # supervision here, as the bottleneck does not receive any
+        # prompt information and therefore cannot know which
+        # bundle to predict
+        z = self.bottleneck(x)
+
+        return z, encoder_features, mask_features
+
+    def decode(self, z, encoder_features, mask_features, bundle_prompt):
+        """ Forward pass of the model's decoder. """
+        # Embed the bundle prompt to the same dimension as the input fodf
+        prompt_embed = self.prompt_embedding(bundle_prompt)
 
         # Run the decoder
         # Decoder layers are run in reverse order to match the

@@ -2,13 +2,12 @@
 import argparse
 import nibabel as nib
 import numpy as np
-import scipy.ndimage as ndi
 import torch
 
 from argparse import RawTextHelpFormatter
 from tqdm import tqdm
 
-from scipy.ndimage import gaussian_filter, binary_closing
+from scipy.ndimage import gaussian_filter
 
 from scilpy.io.utils import (
     assert_inputs_exist, assert_outputs_exist, add_overwrite_arg)
@@ -112,7 +111,7 @@ class LabelSeg():
         # Predict the scores of the streamlines
         pbar = tqdm(range(nb_bundles))
 
-        # TODO: Load data only once, loop over all bundles and yield result
+        # TODO: reuse encoding since it doesn't have prompt info
         data = torch.tensor(
             fodf_data,
             dtype=torch.float
@@ -123,19 +122,25 @@ class LabelSeg():
             dtype=torch.float
         ).to('cuda:0')
 
+        prompts = torch.eye(len(self.bundles), device='cuda:0')
+
         with torch.no_grad():
+
+            z, encoder_features, mask_features = model.samunet.encode(
+                data[None, ...], wm_prompt[None, ...])
+
             for i in pbar:
                 pbar.set_description(self.bundles[i])
 
-                prompt = torch.zeros(nb_bundles, device='cuda:0')
-                prompt[i] = 1
+                y_hat = model.samunet.decode(
+                    z, encoder_features, mask_features, prompts[None, i, ...]
+                )[-1]
 
-                y_hat = model(
-                    data[None, ...], prompt[None, ...], wm_prompt[None, ...])[-1]
                 bundle_mask = y_hat[0][0].cpu().numpy().astype(np.float32)
                 bundle_label = y_hat[0][1].cpu().numpy().astype(np.float32)
 
-                bundle_mask = self.post_process_mask(bundle_mask, self.bundles[i])
+                bundle_mask = self.post_process_mask(
+                    bundle_mask, self.bundles[i])
                 bundle_label = self.post_process_labels(
                     bundle_label, bundle_mask, self.nb_labels)
 

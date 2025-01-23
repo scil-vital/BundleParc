@@ -3,6 +3,7 @@ import lightning.pytorch as pl
 from torch.utils.data import DataLoader, random_split
 
 from LabelSeg.dataset.labelseg_dataset import LabelSegDataset
+from LabelSeg.dataset.labelseg_pretrain_dataset import LabelSegPretrainDataset
 
 
 class LabelSegDataModule(pl.LightningDataModule):
@@ -18,6 +19,7 @@ class LabelSegDataModule(pl.LightningDataModule):
         bundles=[],
         batch_size: int = 1,
         num_workers: int = 10,
+        pretrain: bool = False
     ):
         """
 
@@ -44,6 +46,7 @@ class LabelSegDataModule(pl.LightningDataModule):
 
         self.wm_drop_ratio = wm_drop_ratio
         self.bundles = bundles
+        self.pretrain = pretrain
 
         self.save_hyperparameters()
 
@@ -59,23 +62,23 @@ class LabelSegDataModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage: str):
-        print(self.val_file, self.test_file)
+        cls = LabelSegPretrainDataset if self.pretrain else LabelSegDataset
         if self.val_file is None and self.test_file is None:
-            whole_data = LabelSegDataset(
+            whole_data = cls(
                 self.train_file[0], self.wm_drop_ratio, self.bundles)
             self.train, self.val, self.test = \
                 random_split(whole_data, [0.70, 0.20, 0.10],)
             self.test.is_test = True
         else:
             # Assign train/val datasets for use in dataloaders
-            self.train = LabelSegDataset(
+            self.train = cls(
                 self.train_file, self.wm_drop_ratio, self.bundles)
 
-            self.val = LabelSegDataset(
+            self.val = cls(
                 self.val_file, self.wm_drop_ratio, self.bundles)
 
             # Assign test dataset for use in dataloader(s)
-            self.test = LabelSegDataset(
+            self.test = cls(
                 self.test_file, self.wm_drop_ratio, self.bundles, is_test=True)
 
         self.bundles = self.train.bundle_set
