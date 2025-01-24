@@ -21,7 +21,7 @@ class LabelSeg(LightningModule):
     def __init__(
         self,
         prompt_strategy: str,
-        volume_size: int = 96,
+        volume_size: int = 128,
         bundles: list = [],
         lr: float = 1e-4,
         betas: tuple = (0.9, 0.999),

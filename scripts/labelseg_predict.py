@@ -216,7 +216,7 @@ def _build_arg_parser(parser):
     parser.add_argument('--sh_order', type=int, default=6,
                         choices=[2, 4, 6, 8],
                         help='SH order to use.')
-    parser.add_argument('--img_size', type=int, default=96)
+    parser.add_argument('--img_size', type=int, default=128)
     parser.add_argument('--checkpoint', type=str,
                         default='model/labelseg_hcp105.ckpt',
                         help='Checkpoint (.ckpt) containing hyperparameters '

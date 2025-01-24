@@ -69,6 +69,10 @@ class LabelSegDataModule(pl.LightningDataModule):
             self.train, self.val, self.test = \
                 random_split(whole_data, [0.70, 0.20, 0.10],)
             self.test.is_test = True
+
+            self.bundles = self.train.dataset.bundle_set
+            assert self.train.dataset.bundle_set == self.val.dataset.bundle_set
+
         else:
             # Assign train/val datasets for use in dataloaders
             self.train = cls(
@@ -81,8 +85,8 @@ class LabelSegDataModule(pl.LightningDataModule):
             self.test = cls(
                 self.test_file, self.wm_drop_ratio, self.bundles, is_test=True)
 
-        self.bundles = self.train.bundle_set
-        assert self.train.bundle_set == self.val.bundle_set
+            self.bundles = self.train.bundle_set
+            assert self.train.bundle_set == self.val.bundle_set
 
     def train_dataloader(self):
         """ Create the dataloader for the training set
