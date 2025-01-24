@@ -71,8 +71,7 @@ class LabelSegDataModule(pl.LightningDataModule):
             self.test.is_test = True
 
             self.bundles = self.train.dataset.bundle_set
-            assert self.train.dataset.bundle_set == self.val.data.bundle_set
-
+            assert self.train.dataset.bundle_set == self.val.dataset.bundle_set
         else:
             # Assign train/val datasets for use in dataloaders
             self.train = cls(
