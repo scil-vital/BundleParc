@@ -438,7 +438,7 @@ class Head(nn.Module):
 
         self.conv = nn.Conv3d(
             in_chans, 2, kernel_size=1, stride=1)
-        self.act = nn.Sigmoid()
+        # self.act = nn.Sigmoid()
 
         # Use Xavier initialisation for weights
         for m in self.modules():
@@ -447,7 +447,7 @@ class Head(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.act(x)
+        # x = self.act(x)
         return x
 
 

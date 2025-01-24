@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from typing import List
 
 from lightning.pytorch import LightningModule
-from torch.nn import BCELoss
+from torch.nn import BCEWithLogitsLoss as BCELoss
 
 from monai.losses import DiceLoss
 from monai.metrics.meandice import DiceMetric
@@ -53,7 +53,7 @@ class LabelSeg(LightningModule):
         self.ds = ds
 
         self.ce = BCELoss(reduction='none')
-        self.dice = DiceLoss(sigmoid=False, jaccard=False, squared_pred=True,
+        self.dice = DiceLoss(sigmoid=True, jaccard=False, squared_pred=True,
                              reduction='none', include_background=True)
 
         self.dice_metric = DiceMetric(
@@ -117,8 +117,6 @@ class LabelSeg(LightningModule):
 
         # Mask prediction
         y_mask = y_pred[:, [0]]
-        # Mask for the CE
-        ce_mask = (y_true >= 1)
         # Mask for the cross-entropy
         ce_mask = (y_true >= 1)
         # Target for mask
@@ -225,7 +223,7 @@ class LabelSeg(LightningModule):
         loss_ce, loss_dice = self.mask_loss(y_hat, y, self.ds)
         loss = loss_ce + loss_dice
 
-        preds = (y_hat[-1][:, [0]] > 0.5).int()
+        preds = (F.sigmoid(y_hat[-1][:, [0]]) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()
@@ -249,7 +247,7 @@ class LabelSeg(LightningModule):
         loss_ce, loss_dice = self.mask_loss(y_hat, y, self.ds)
         loss = loss_ce + loss_dice
 
-        preds = (y_hat[-1][:, [0]] > 0.5).int()
+        preds = (F.sigmoid(y_hat[-1][:, [0]]) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()
