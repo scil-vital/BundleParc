@@ -31,7 +31,8 @@ def _build_arg_parser():
     parser.add_argument('id', type=str, help='ID of experiment.')
     parser.add_argument('data', type=str, nargs='+',
                         help='Path to the data.')
-
+    # TODO: reorganize arguments into meaningful groups. Fix descriptions
+    # as well.
     data_g = parser.add_argument_group('Model')
     data_g.add_argument('--prompt_strategy', choices=['attention', 'add'],
                         default='add',
