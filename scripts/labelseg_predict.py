@@ -218,7 +218,7 @@ def _build_arg_parser(parser):
                         help='SH order to use.')
     parser.add_argument('--img_size', type=int, default=96)
     parser.add_argument('--checkpoint', type=str,
-                        default='model/tractoracle.ckpt',
+                        default='model/labelseg_hcp105.ckpt',
                         help='Checkpoint (.ckpt) containing hyperparameters '
                              'and weights of model. Default is '
                              '[%(default)s].')

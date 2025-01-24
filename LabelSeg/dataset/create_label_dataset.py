@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 
-""" TOTO
+""" The expected directory structure is ...
+TODO
 """
 
 import argparse
@@ -17,9 +18,11 @@ from tqdm import tqdm
 
 from scilpy.image.volume_operations import resample_volume, apply_transform
 
+from LabelSeg.utils.constants import TRACTSEG_BUNDLES
+
 
 def create_dataset(
-    subs, output_file, volume_size, nb_coeffs, nb_points, dtype, bundles
+    subs, output_file, volume_size, nb_coeffs, dtype, bundles
 ):
     """
     """
@@ -29,8 +32,13 @@ def create_dataset(
     # Open the output file
     with h5py.File(output_file, 'w') as f:
         # Loop over the directories in the input directory
+        f.create_group
         progress = tqdm(subs)
         for subject in progress:
+
+            f.attrs['volume_size'] = volume_size
+            f.attrs['nb_coeffs'] = nb_coeffs
+            f.attrs['bundles'] = bundles
 
             sub_id = split(subject)[-1]
             progress.set_description(sub_id)
@@ -122,26 +130,18 @@ def main():
     parser.add_argument('subs', nargs='+', type=str,
                         help='Input directory containing FODF volumes')
     parser.add_argument('output_file', help='Output HDF5 file')
-    parser.add_argument('--volume_size', default=96, type=int,
-                        help='Volume size to resample.')
-    parser.add_argument('--nb_coeffs', choices=[28, 45],
-                        default=28, type=int,
-                        help='Nb. of SH coeffs to use.')
-    parser.add_argument('--nb_points', type=int, default=64,
-                        help='Nb. of points to resample the streamlines to.')
+    parser.add_argument('--volume_size', default=128, type=int,
+                        help='Volume size to resample to.')
+    parser.add_argument('--sh_order', type=int, default=6,
+                        choices=[2, 4, 6, 8],
+                        help='SH order to use.')
     parser.add_argument('--dtype', choices=['float16', 'float32'],
                         default='float32', type=str,
                         help='Cast data to this type before storing.')
     parser.add_argument('--force', action='store_true',
                         help='Overwrite output file if it exists.')
     parser.add_argument('--bundles', type=str, nargs='+',
-                        default=['AF_L', 'AF_R', 'CC_Fr_1', 'CC_Fr_2', 'CC_Oc',
-                                 'CC_Pa', 'CC_Pr_Po', 'CG_L', 'CG_R', 'FAT_L',
-                                 'FAT_R', 'FPT_L', 'FPT_R', 'FX_L', 'FX_R',
-                                 'IFOF_L', 'IFOF_R', 'ILF_L', 'ILF_R', 'MCP',
-                                 'MdLF_L', 'MdLF_R', 'OR_ML_L', 'OR_ML_R',
-                                 'POPT_L', 'POPT_R', 'PYT_L', 'PYT_R', 'SLF_L',
-                                 'SLF_R', 'UF_L', 'UF_R'])
+                        default=TRACTSEG_BUNDLES)
     args = parser.parse_args()
 
     # Check if the input directory exists
@@ -153,9 +153,12 @@ def main():
     if exists(args.output_file) and not args.force:
         raise ValueError('Output file already exists')
 
+    n_coefs = int(
+            (args.sh_order + 2) * (args.sh_order + 1) // 2)
+
     # Create the dataset
     create_dataset(args.subs, args.output_file, args.volume_size,
-                   args.nb_coeffs, args.nb_points, args.dtype, args.bundles)
+                   n_coefs, args.dtype, args.bundles)
 
 
 if __name__ == '__main__':

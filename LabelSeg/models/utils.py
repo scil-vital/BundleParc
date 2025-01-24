@@ -19,9 +19,6 @@ def get_model(checkpoint_file, kwargs={}):
     # The model's class is saved in hparams
     models = {
         # Add other architectures here
-        'FinetuneViT3D': FinetuneViT3D,
-        'MAEViT3D': MAEViT3D,
-        'LabelSeg': LabelSeg,
         'LabelSeg': LabelSeg,
     }
 
