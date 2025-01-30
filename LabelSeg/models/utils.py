@@ -23,6 +23,7 @@ def get_model(checkpoint_file, kwargs={}):
     }
 
     hyper_parameters = checkpoint["hyper_parameters"]
+
     # Load it from the checkpoint
     try:
         model = models[hyper_parameters[

@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from argparse import RawTextHelpFormatter
+from torch.nn import functional as F
 from tqdm import tqdm
 
 from scipy.ndimage import gaussian_filter
@@ -17,6 +18,8 @@ from LabelSeg.models.utils import get_model
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 cast_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+DEFAULT_BUNDLES=['AF_left', 'AF_right', 'ATR_left', 'ATR_right', 'CA', 'CC_1', 'CC_2', 'CC_3', 'CC_4', 'CC_5', 'CC_6', 'CC_7', 'CG_left', 'CG_right', 'CST_left', 'CST_right', 'FPT_left', 'FPT_right', 'FX_left', 'FX_right', 'ICP_left', 'ICP_right', 'IFO_left', 'IFO_right', 'ILF_left', 'ILF_right', 'MCP', 'MLF_left', 'MLF_right', 'OR_left', 'OR_right', 'POPT_left', 'POPT_right', 'SCP_left', 'SCP_right', 'SLF_III_left', 'SLF_III_right', 'SLF_II_left', 'SLF_II_right', 'SLF_I_left', 'SLF_I_right', 'STR_left', 'STR_right', 'ST_FO_left', 'ST_FO_right', 'ST_OCC_left', 'ST_OCC_right', 'ST_PAR_left', 'ST_PAR_right', 'ST_POSTC_left', 'ST_POSTC_right', 'ST_PREC_left', 'ST_PREC_right', 'ST_PREF_left', 'ST_PREF_right', 'ST_PREM_left', 'ST_PREM_right', 'T_OCC_left', 'T_OCC_right', 'T_PAR_left', 'T_PAR_right', 'T_POSTC_left', 'T_POSTC_right', 'T_PREC_left', 'T_PREC_right', 'T_PREF_left', 'T_PREF_right', 'T_PREM_left', 'T_PREM_right', 'UF_left', 'UF_right'] # noqa E501
 
 
 class LabelSeg():
@@ -91,7 +94,7 @@ class LabelSeg():
         bundle_label[bundle_mask.astype(bool)] = discrete_labels
         bundle_label[~bundle_mask.astype(bool)] = 0
 
-        return bundle_label.astype(np.uint16)
+        return bundle_label.astype(np.int32)
 
     @torch.no_grad()
     def predict(self, model, fodf, wm):
@@ -126,18 +129,20 @@ class LabelSeg():
 
         with torch.no_grad():
 
-            z, encoder_features, mask_features = model.samunet.encode(
+            z, encoder_features, mask_features = model.labelsegnet.encode(
                 data[None, ...], wm_prompt[None, ...])
 
             for i in pbar:
                 pbar.set_description(self.bundles[i])
 
-                y_hat = model.samunet.decode(
+                y_hat = model.labelsegnet.decode(
                     z, encoder_features, mask_features, prompts[None, i, ...]
                 )[-1]
 
-                bundle_mask = y_hat[0][0].cpu().numpy().astype(np.float32)
-                bundle_label = y_hat[0][1].cpu().numpy().astype(np.float32)
+                bundle_mask = F.sigmoid(
+                    y_hat[0][0]).cpu().numpy().astype(np.float32)
+                bundle_label = F.sigmoid(
+                    y_hat[0][1]).cpu().numpy().astype(np.float32)
 
                 bundle_mask = self.post_process_mask(
                     bundle_mask, self.bundles[i])
@@ -218,18 +223,12 @@ def _build_arg_parser(parser):
                         help='SH order to use.')
     parser.add_argument('--img_size', type=int, default=128)
     parser.add_argument('--checkpoint', type=str,
-                        default='model/labelseg_hcp105.ckpt',
+                        default='checkpoints/labelseg.ckpt',
                         help='Checkpoint (.ckpt) containing hyperparameters '
                              'and weights of model. Default is '
                              '[%(default)s].')
     parser.add_argument('--bundles', type=str, nargs='+',
-                        default=['AF_L', 'AF_R', 'CC_Fr_1', 'CC_Fr_2', 'CC_Oc',
-                                 'CC_Pa', 'CC_Pr_Po', 'CG_L', 'CG_R', 'FAT_L',
-                                 'FAT_R', 'FPT_L', 'FPT_R', 'FX_L', 'FX_R',
-                                 'IFOF_L', 'IFOF_R', 'ILF_L', 'ILF_R', 'MCP',
-                                 'MdLF_L', 'MdLF_R', 'OR_ML_L', 'OR_ML_R',
-                                 'POPT_L', 'POPT_R', 'PYT_L', 'PYT_R', 'SLF_L',
-                                 'SLF_R', 'UF_L', 'UF_R'],
+                        default=DEFAULT_BUNDLES,
                         help='Bundle list to predict.')
 
     add_overwrite_arg(parser)

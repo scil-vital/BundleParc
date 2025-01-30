@@ -17,6 +17,7 @@ from os.path import exists, join, split
 from tqdm import tqdm
 
 from scilpy.image.volume_operations import resample_volume, apply_transform
+from scilpy.io.utils import add_overwrite_arg, assert_outputs_exist
 
 from LabelSeg.utils.constants import TRACTSEG_BUNDLES
 
@@ -142,16 +143,18 @@ def main():
                         help='Overwrite output file if it exists.')
     parser.add_argument('--bundles', type=str, nargs='+',
                         default=TRACTSEG_BUNDLES)
+    add_overwrite_arg(parser)
     args = parser.parse_args()
 
     # Check if the input directory exists
+
+    # assert_inputs_exist(parser, args.subs)
+
     for s in args.subs:
         if not exists(s):
             raise ValueError('Input directory does not exist')
 
-    # Check if the output file exists
-    if exists(args.output_file) and not args.force:
-        raise ValueError('Output file already exists')
+    assert_outputs_exist(parser, args, args.output_file)
 
     n_coefs = int(
             (args.sh_order + 2) * (args.sh_order + 1) // 2)
