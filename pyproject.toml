@@ -12,7 +12,7 @@ authors = [
 ]
 description = "LabelSeg"
 readme = "README.md"
-requires-python = "==3.10.*"
+requires-python = ">=3.10"
 keywords = [""]
 license = {text = "MIT"}
 classifiers = [
@@ -30,7 +30,7 @@ dependencies = [
     "scilpy",
     'importlib-metadata; python_version<"3.10"',
 ]
-dynamic = ["version"]
+version = "0.0.1"
 
 [project.scripts]
 labelseg_train = "scripts.labelseg_train:main"
