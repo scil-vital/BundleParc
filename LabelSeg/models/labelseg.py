@@ -52,6 +52,13 @@ class LabelSeg(LightningModule):
         self.epochs = epochs
         self.ds = ds
 
+        self.in_chans = 28
+        self.volume_size = volume_size
+        self.prompt_strategy = 'attention'
+        self.embed_dim = 32
+        self.bottleneck_dim = 512
+        self.n_bundles = len(self.bundles)
+
         self.ce = BCELoss(reduction='none')
         self.dice = DiceLoss(sigmoid=True, jaccard=False, squared_pred=True,
                              reduction='none', include_background=True)
@@ -63,8 +70,9 @@ class LabelSeg(LightningModule):
 
         self.labelsegnet = model
         if model is None:
-            self.labelsegnet = LabelSegNet(28, volume_size, prompt_strategy,
-                                           n_bundles=len(self.bundles))
+            self.labelsegnet = LabelSegNet(
+                self.in_chans, self.volume_size, self.prompt_strategy,
+                self.embed_dim, self.bottleneck_dim, n_bundles=self.n_bundles)
 
         if not self.pretrained:
             self.save_hyperparameters()

@@ -263,7 +263,7 @@ def parse_args():
 
     assert_inputs_exist(parser, args.fodf)
     assert_outputs_exist(parser, args, args.out_prefix,
-                         [args.mask, args.tracking])
+                         [args.mask])
 
     return parser, args
 

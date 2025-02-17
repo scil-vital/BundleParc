@@ -455,7 +455,7 @@ class LabelSegNet(nn.Module):
 
     def __init__(self, in_chans, volume_size=96,
                  prompt_strategy='add',
-                 embed_dim=32, bottleneck_dim=512, n_bundles=72):
+                 embed_dim=32, bottleneck_dim=512, n_bundles=71):
         super().__init__()
 
         self.channels = [32, 64, 128, 256, 512]

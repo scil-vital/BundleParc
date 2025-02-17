@@ -23,6 +23,10 @@ def get_model(checkpoint_file, kwargs={}):
     }
 
     hyper_parameters = checkpoint["hyper_parameters"]
+    hyper_parameters.update({'pretrained': True, 'in_chans': 28,
+                             'volume_size': 128, 'embed_dim': 32,
+                             'bottleneck_dim': 512,
+                             'prompt_strategy': 'attention', 'n_bundles': 71})
 
     # Load it from the checkpoint
     try:
@@ -34,6 +38,12 @@ def get_model(checkpoint_file, kwargs={}):
         model = models[hyper_parameters[
             'name']].load_from_checkpoint(
                 checkpoint_file, map_location=torch.device('cpu'))
+
+    new_checkpoint = {'hyperparameters': hyper_parameters,
+                      'state_dict': model.labelsegnet.state_dict()}
+
+    torch.save(new_checkpoint, 'labelsegnet.ckpt')
+
     # Put the model in eval mode to fix dropout and other stuff
     model.eval()
 
