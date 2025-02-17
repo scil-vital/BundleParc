@@ -3,10 +3,10 @@
 """
 LabelSeg: automatic tract labelling without tractography.
 
-This method takes as input fODF maps of order 6 (and a WM mask) and outputs 71
-bundle label maps. These maps can then be used to perform tractometry/
-tract profiling/radiomics. The bundle definitions follow TractSeg's minus the
-whole CC.
+This method takes as input fODF maps of order 6 of descoteaux07 basis and a WM
+mask and outputs 71 bundle label maps. These maps can then be used to perform
+tractometry/tract profiling/radiomics. The bundle definitions follow TractSeg's
+minus the whole CC.
 
 To cite: Antoine Théberge, Zineb El Yamani, François Rheault, Maxime Descoteaux, Pierre-Marc Jodoin (2025). LabelSeg. ISMRM Workshop on 40 Years of Diffusion: Past, Present & Future Perspectives, Kyoto, Japan.  # noqa
 """
@@ -58,12 +58,13 @@ class LabelSeg():
         """
         self.checkpoint = dto['checkpoint']
         self.img_size = 128  # TODO: get image size from model
-        self.fodf = dto['fodf']
-        self.wm = dto['wm']
-        self.out = dto['out_prefix']
-        self.mask_out = dto['mask']
+        self.fodf = dto['in_fodf']
+        self.wm = dto['in_wm']
         self.bundles = DEFAULT_BUNDLES
-        self.nb_labels = dto['nb_labels']
+        self.nb_labels = dto['nb_pts']
+        self.half = dto['half_precision']
+        self.out_prefix = dto['out_prefix']
+        self.out_folder = dto['out_folder']
         self.n_coefs = int(
             (6 + 2) * (6 + 1) // 2)  # TODO: infer sh order from model
 
@@ -135,20 +136,19 @@ class LabelSeg():
         # Predict the scores of the streamlines
         pbar = tqdm(range(nb_bundles))
 
-        # TODO: reuse encoding since it doesn't have prompt info
-        data = torch.tensor(
-            fodf_data,
-            dtype=torch.float
-        ).to('cuda:0')
+        with torch.amp.autocast(str(get_device())):
 
-        wm_prompt = torch.tensor(
-            wm_data,
-            dtype=torch.float
-        ).to('cuda:0')
+            data = torch.tensor(
+                fodf_data,
+                dtype=torch.float
+            ).to('cuda:0')
 
-        prompts = torch.eye(len(self.bundles), device=get_device())
+            wm_prompt = torch.tensor(
+                wm_data,
+                dtype=torch.float
+            ).to('cuda:0')
 
-        with torch.no_grad():
+            prompts = torch.eye(len(self.bundles), device=get_device())
 
             z, encoder_features, mask_features = model.labelsegnet.encode(
                 data[None, ...], wm_prompt[None, ...])
@@ -169,7 +169,7 @@ class LabelSeg():
                 bundle_label = self.post_process_labels(
                     bundle_label, bundle_mask, self.nb_labels)
 
-                yield bundle_mask, bundle_label, self.bundles[i]
+                yield bundle_label, self.bundles[i]
 
     def run(self):
         """
@@ -178,7 +178,15 @@ class LabelSeg():
         fodf_in = nib.load(self.fodf)
         wm_in = nib.load(self.wm)
 
-        # shape = fodf_in.get_fdata().shape[:3]
+        # TODO in future release: infer sh order from model
+        n_coefs = 28
+        actual_coefs = fodf_in.get_fdata().shape[-1]
+        assert actual_coefs >= n_coefs, \
+            f'Input fODFs should have at least {n_coefs} coefficients.'
+
+        if actual_coefs > n_coefs:
+            print('Input fODFs have more than 28 coefficients. '
+                  f'Only the first {n_coefs} will be used.')
 
         # Resampling volume to fit the model's input at training time
         resampled_img = resample_volume(fodf_in, ref_img=None,
@@ -200,7 +208,7 @@ class LabelSeg():
 
         # Predict label maps. `self.predict` is a generator
         # yielding one label map per bundle (and a binary mask)
-        for y_hat_mask, y_hat_label, b_name in self.predict(
+        for y_hat_label, b_name in self.predict(
             model, resampled_img, resampled_wm
         ):
             # Format the output as a nifti image
@@ -216,40 +224,35 @@ class LabelSeg():
                                         interp='nn',
                                         enforce_dimensions=False)
             # Save it
-            nib.save(label_img, self.out + f'{b_name}.nii.gz')
-
-            # If the binary mask is also desired, perform the same
-            # processing.
-            if self.mask_out:
-                mask_img = nib.Nifti1Image(y_hat_mask,
-                                           resampled_wm.affine,
-                                           resampled_wm.header)
-                mask_img = resample_volume(mask_img, ref_img=wm_in,
-                                           # volume_shape=shape,
-                                           iso_min=False,
-                                           voxel_res=None,
-                                           interp='nn',
-                                           enforce_dimensions=False)
-                nib.save(label_img, self.mask_out + f'{b_name}.nii.gz')
+            nib.save(label_img, os.path.join(
+                self.out_folder, self.out_prefix + f'{b_name}.nii.gz'))
 
 
 def _build_arg_parser(parser):
-    parser.add_argument('fodf', type=str,
-                        help='fODF input')
-    parser.add_argument('wm', type=str,
-                        help='WM input')
-    parser.add_argument('out_prefix', type=str,
-                        help='Output destination and file prefix.')
-    parser.add_argument('--mask', type=str, default=None,
-                        help='Output destination and file prefix for '
-                             'binary mask output.')
-    parser.add_argument('--nb_labels', type=int, default=50)
+    parser.add_argument('in_fodf', type=str,
+                        help='fODF input of order 6 or above. If the input '
+                             'has more than 28 coefficients, only the first 28'
+                             ' will be used.')
+    parser.add_argument('in_wm', type=str,
+                        help='Whole-brain WM mask input.')
+    parser.add_argument('--out_prefix', type=str, default='',
+                        help='Output file prefix. Default is nothing. ')
+    parser.add_argument('--out_folder', type=str, default='',
+                        help='Output destination. Default is the current '
+                             'directory.')
+    parser.add_argument('--nb_pts', type=int, default=50,
+                        help='Number of divisions per bundle. '
+                             'Default is [%(default)s].')
+    parser.add_argument('--half_precision', action='store_true',
+                        help='Use half precision (float16) for inference. '
+                             'This reduces memory usage but may lead to '
+                             'reduced accuracy.')
     parser.add_argument('--checkpoint', type=str,
                         default=DEFAULT_CKPT,
                         help='Checkpoint (.ckpt) containing hyperparameters '
                              'and weights of model. Default is '
-                             '[%(default)s].')
-
+                             '[%(default)s]. If the file does not exist, it '
+                             'will be downloaded.')
     add_overwrite_arg(parser)
 
 
@@ -261,9 +264,8 @@ def parse_args():
     _build_arg_parser(parser)
     args = parser.parse_args()
 
-    assert_inputs_exist(parser, args.fodf)
-    assert_outputs_exist(parser, args, args.out_prefix,
-                         [args.mask])
+    assert_inputs_exist(parser, args.in_fodf)
+    assert_outputs_exist(parser, args, [], [args.out_prefix])
 
     return parser, args
 

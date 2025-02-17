@@ -18,7 +18,7 @@ Docker containers are coming soon-ish.
 The method takes as input a fODF map of order 6 (descoteaux07 basis) and a WM mask:
 
 Example command:
-```labelseg_predict fodf.nii.gz wm_mask.nii.gz --out_prefix sub-001__```
+```labelseg_predict fodf.nii.gz wm_mask.nii.gz --out_prefix sub-001__ --nb_pts 25```
 
 See `--help` for more arguments.
 
