@@ -5,7 +5,7 @@ Code and pretrained model for __LabelSeg: automatic tract labeling without tract
 
 ## Applicability
 
-LabelSeg so far has not been tested on data other than healyhy young adults. If you're using LabelSeg on pathological/young/old patients, let me know how it went and what can be improved ! Send me an email at "antoine (dot) theberge (at) usherbrooke (dot) ca".
+LabelSeg so far has not been tested on data other than healthy young adults. If you're using LabelSeg on pathological/young/old patients, let me know how it went and what can be improved ! Send me an email at "antoine (dot) theberge (at) usherbrooke (dot) ca".
 
 ## Installation
 
