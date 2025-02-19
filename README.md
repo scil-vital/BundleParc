@@ -1,5 +1,11 @@
+![LabelSeg](header.png)
+
 # LabelSeg
-Code and pretrained model for LabelSeg: automatic tract labeling without tractography
+Code and pretrained model for __LabelSeg: automatic tract labeling without tractography__
+
+## Applicability
+
+LabelSeg so far has not been tested on data other than healthy young adults. If you're using LabelSeg on pathological/young/old patients, let me know how it went and what can be improved ! Send me an email at "antoine (dot) theberge (at) usherbrooke (dot) ca".
 
 ## Installation
 
@@ -27,12 +33,7 @@ Example output:
 
 The software will output 71 files, each corresponding to a bundle's label map. The bundle definitions follow TractSeg's, minus the whole CC.
 
-LabelSeg may move to [scilpy](https://github.com/scilus/scilpy) soon ! Stay updated by starring the repo.
-
-
-## Applicability
-
-LabelSeg so far has not been tested on data other than healyhy young adults. If you're using LabelSeg on pathological/young/old patients, let me know how it went ahd what can be improved ! 
+__LabelSeg may move to [scilpy](https://github.com/scilus/scilpy) soon ! Stay updated by starring the repo.__
 
 ## Troubleshooting
 
