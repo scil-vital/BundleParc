@@ -120,7 +120,7 @@ def train(args, root_dir):
     # Mixed precision is used to speed up training and
     # reduce memory usage
     trainer = Trainer(
-        devices=args.devices, num_nodes=1, accelerator='auto',
+        devices=args.devices, num_nodes=2, accelerator='auto',
         strategy='fsdp' if args.devices > 1 else 'auto',
         logger=comet_logger,
         log_every_n_steps=1,
