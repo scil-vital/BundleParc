@@ -342,8 +342,8 @@ class DecoderNextLayer(nn.Module):
         return z
 
     def _prompt_add(self, z, prompt_encoding, dense_encoding):
-
-        z += dense_encoding
+        if dense_encoding is not None:
+            z += dense_encoding
         z = self.prompt_conv(z)
         z += prompt_encoding[..., None, None, None]
 
@@ -355,7 +355,10 @@ class DecoderNextLayer(nn.Module):
         prompt_encoding = prompt_encoding[:, None, :]
         pe = self.pe_layer(z)
 
-        image_embedding = (z + dense_encoding).flatten(2).permute(0, 2, 1)
+        if dense_encoding is not None:
+            z += dense_encoding
+
+        image_embedding = (z).flatten(2).permute(0, 2, 1)
         pe = pe.flatten(2).permute(0, 2, 1)
 
         z, prompt_encoding = self.tkn2img(
@@ -399,6 +402,10 @@ class LabelSegNetDecoder(nn.Module):
     def forward(self, x, embeddings, prompt_encoding, dense_encoding):
 
         ds_outs = []
+        nb_layers = len(self.layers)
+
+        if dense_encoding is None:
+            dense_encoding = [None] * nb_layers
 
         for decoder_layer, encoder_feature, dense_feature in zip(
             self.layers, embeddings, dense_encoding
