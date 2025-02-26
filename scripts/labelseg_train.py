@@ -137,6 +137,7 @@ def train(args, root_dir):
         model.train()
     else:
         model = LabelSeg(
+            mask_prompt=args.wm_drop_ratio < 1,
             prompt_strategy=args.prompt_strategy,
             volume_size=args.volume_size,
             bundles=args.bundles,

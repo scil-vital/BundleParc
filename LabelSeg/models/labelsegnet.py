@@ -455,20 +455,31 @@ class LabelSegNet(nn.Module):
 
     def __init__(self, in_chans, volume_size=96,
                  prompt_strategy='add',
+                 mask_prompt=True,
                  embed_dim=32, bottleneck_dim=512, n_bundles=71):
         super().__init__()
 
         self.channels = [32, 64, 128, 256, 512]
 
+        # Important to store this for loading the model later.
+        self.in_chans = in_chans
         self.prompt_strategy = prompt_strategy
         self.volume_size = volume_size
+        self.mask_prompt = mask_prompt
+        self.embed_dim = embed_dim
+        self.bottleneck_dim = bottleneck_dim
+        self.n_bundles = n_bundles
 
         # Define the model
         self.stem = Stem(in_chans, embed_dim)
         self.mask_stem = Stem(1, embed_dim)
 
         self.encoder = UNextEncoder(self.channels)
-        self.mask_encoder = UNextEncoder(self.channels)
+
+        # TODO: try to remove WM mask dependency
+        if mask_prompt:
+            self.mask_encoder = UNextEncoder(self.channels)
+            self.no_mask_embed = nn.Embedding(1, embed_dim)
 
         self.bottleneck = ConvNextBlock(bottleneck_dim, ratio=4)
         self.decoder = LabelSegNetDecoder(prompt_strategy,
@@ -477,8 +488,6 @@ class LabelSegNet(nn.Module):
 
         self.prompt_embedding = nn.Sequential(
             nn.Linear(n_bundles, bottleneck_dim), nn.GELU())
-
-        self.no_mask_embed = nn.Embedding(1, embed_dim)
 
     def forward(self, fodf, bundle_prompt, wm_prompt=None):
         """ Forward pass of the model. """
@@ -494,12 +503,13 @@ class LabelSegNet(nn.Module):
         # Embded the "dense" mask if it is provided
         # Else, use the learned embedding
         # TODO: Is it actually necessary to support the no mask case?
-        if torch.sum(wm_prompt) == 0:
-            dense_embeddings = self.no_mask_embed.weight.reshape(
-                1, -1, 1, 1, 1).expand(
-                    B, -1, X, Y, Z)
-        else:
-            dense_embeddings = self.mask_stem(wm_prompt)
+        if self.mask_prompt:
+            if torch.sum(wm_prompt) == 0:
+                dense_embeddings = self.no_mask_embed.weight.reshape(
+                    1, -1, 1, 1, 1).expand(
+                        B, -1, X, Y, Z)
+            else:
+                dense_embeddings = self.mask_stem(wm_prompt)
 
         # Run the encoders for the input fodf and the mask
         # TODO: Consider using a single encoder for both ?
@@ -508,12 +518,15 @@ class LabelSegNet(nn.Module):
         x = input_embedding
         for encoder_layer in self.encoder.layers:
             x, x_res = encoder_layer(x)
-            encoder_features.append(x_res)
+            encoder_features.insert(0, x_res)
 
-        m = dense_embeddings
-        for mask_encoder_layers in self.mask_encoder.layers:
-            m, m_res = mask_encoder_layers(m)
-            mask_features.append(m_res)
+        if self.mask_prompt:
+            m = dense_embeddings
+            for mask_encoder_layers in self.mask_encoder.layers:
+                m, m_res = mask_encoder_layers(m)
+                mask_features.insert(0, m_res)
+        else:
+            mask_features = None
 
         # As opposed to the original MedNeXt, we do not use deep
         # supervision here, as the bottleneck does not receive any
@@ -526,7 +539,7 @@ class LabelSegNet(nn.Module):
         # encoder features. Deep supervision heads produce smaller
         # versions of the final output
         z, ds_outs = self.decoder(
-            z, encoder_features[::-1], prompt_embed, mask_features[::-1])
+            z, encoder_features, prompt_embed, mask_features)
 
         return ds_outs
 
@@ -540,27 +553,30 @@ class LabelSegNet(nn.Module):
         # Embded the "dense" mask if it is provided
         # Else, use the learned embedding
         # TODO: Is it actually necessary to support the no mask case?
-        if torch.sum(wm_prompt) == 0:
-            dense_embeddings = self.no_mask_embed.weight.reshape(
-                1, -1, 1, 1, 1).expand(
-                    B, -1, X, Y, Z)
-        else:
-            dense_embeddings = self.mask_stem(wm_prompt)
+        if self.mask_prompt:
+            if torch.sum(wm_prompt) == 0:
+                dense_embeddings = self.no_mask_embed.weight.reshape(
+                    1, -1, 1, 1, 1).expand(
+                        B, -1, X, Y, Z)
+            else:
+                dense_embeddings = self.mask_stem(wm_prompt)
 
         # Run the encoders for the input fodf and the mask
         # TODO: Consider using a single encoder for both ?
         encoder_features = []
         mask_features = []
-
         x = input_embedding
         for encoder_layer in self.encoder.layers:
             x, x_res = encoder_layer(x)
-            encoder_features.append(x_res)
+            encoder_features.insert(0, x_res)
 
-        m = dense_embeddings
-        for mask_encoder_layers in self.mask_encoder.layers:
-            m, m_res = mask_encoder_layers(m)
-            mask_features.append(m_res)
+        if self.mask_prompt:
+            m = dense_embeddings
+            for mask_encoder_layers in self.mask_encoder.layers:
+                m, m_res = mask_encoder_layers(m)
+                mask_features.insert(0, m_res)
+        else:
+            mask_features = None
 
         # As opposed to the original MedNeXt, we do not use deep
         # supervision here, as the bottleneck does not receive any
@@ -580,6 +596,6 @@ class LabelSegNet(nn.Module):
         # encoder features. Deep supervision heads produce smaller
         # versions of the final output
         z, ds_outs = self.decoder(
-            z, encoder_features[::-1], prompt_embed, mask_features[::-1])
+            z, encoder_features, prompt_embed, mask_features)
 
         return ds_outs

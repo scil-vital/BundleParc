@@ -21,6 +21,7 @@ class LabelSeg(LightningModule):
     def __init__(
         self,
         prompt_strategy: str,
+        mask_prompt: bool = True,
         volume_size: int = 128,
         bundles: list = [],
         lr: float = 1e-4,
@@ -57,6 +58,7 @@ class LabelSeg(LightningModule):
         self.prompt_strategy = 'attention'
         self.embed_dim = 32
         self.bottleneck_dim = 512
+        self.mask_prompt = mask_prompt
         self.n_bundles = len(self.bundles)
 
         self.ce = BCELoss(reduction='none')
@@ -72,7 +74,8 @@ class LabelSeg(LightningModule):
         if model is None:
             self.labelsegnet = LabelSegNet(
                 self.in_chans, self.volume_size, self.prompt_strategy,
-                self.embed_dim, self.bottleneck_dim, n_bundles=self.n_bundles)
+                self.mask_prompt, self.embed_dim, self.bottleneck_dim,
+                n_bundles=self.n_bundles)
 
         if not self.pretrained:
             self.save_hyperparameters()
