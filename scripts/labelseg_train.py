@@ -123,7 +123,7 @@ def train(args, root_dir):
     # reduce memory usage
     trainer = Trainer(
         devices=args.devices, num_nodes=args.nodes, accelerator='auto',
-        strategy='fsdp' if args.devices > 1 else 'auto',
+        strategy='deepspeed_stage_2' if args.devices > 1 else 'auto',
         logger=comet_logger,
         log_every_n_steps=1,
         check_val_every_n_epoch=10,
@@ -131,7 +131,7 @@ def train(args, root_dir):
         max_epochs=args.epochs,
         enable_checkpointing=True,
         default_root_dir=root_dir,
-        precision='bf16-true',
+        precision='bf16-mixed',
         callbacks=[lr_monitor, early_stop_callback])
 
     if args.checkpoint:
