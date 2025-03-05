@@ -467,34 +467,34 @@ class LabelSegNet(nn.Module):
         super().__init__()
 
         self.channels = [32, 64, 128, 256, 512]
+        # self.channels = [64, 128, 256, 512, 1024]
 
         # Important to store this for loading the model later.
         self.in_chans = in_chans
         self.prompt_strategy = prompt_strategy
         self.volume_size = volume_size
         self.mask_prompt = mask_prompt
-        self.embed_dim = embed_dim
-        self.bottleneck_dim = bottleneck_dim
+        self.embed_dim = self.channels[0]
+        self.bottleneck_dim = self.channels[-1]
         self.n_bundles = n_bundles
 
         # Define the model
-        self.stem = Stem(in_chans, embed_dim)
-        self.mask_stem = Stem(1, embed_dim)
+        self.stem = Stem(in_chans, self.embed_dim)
+        self.mask_stem = Stem(1, self.embed_dim)
 
         self.encoder = UNextEncoder(self.channels)
 
         # TODO: try to remove WM mask dependency
         if mask_prompt:
             self.mask_encoder = UNextEncoder(self.channels)
-            self.no_mask_embed = nn.Embedding(1, embed_dim)
+            self.no_mask_embed = nn.Embedding(1, self.embed_dim)
 
-        self.bottleneck = ConvNextBlock(bottleneck_dim, ratio=4)
+        self.bottleneck = ConvNextBlock(self.bottleneck_dim, ratio=4)
         self.decoder = LabelSegNetDecoder(prompt_strategy,
                                           channels=self.channels[::-1])
-        # self.head = Head(embed_dim)
 
         self.prompt_embedding = nn.Sequential(
-            nn.Linear(n_bundles, bottleneck_dim), nn.GELU())
+            nn.Linear(n_bundles, self.bottleneck_dim), nn.GELU())
 
     def forward(self, fodf, bundle_prompt, wm_prompt=None):
         """ Forward pass of the model. """

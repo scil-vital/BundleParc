@@ -1,0 +1,26 @@
+#!/bin/bash -l
+
+# SLURM SUBMIT SCRIPT
+#SBATCH --nodes=2
+#SBATCH --time=2-00:00:00
+#SBATCH --gpus-per-node=4
+#SBATCH --tasks-per-node=4
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=128G
+#SBATCH --mail-user=antoine.theberge@usherbrooke.ca
+#SBATCH --mail-type=ALL
+
+cd /home/thea1603/workspace/LabelSeg
+module load StdEnv python/3.10 httpproxy
+module load cuda
+source .env/bin/activate
+
+pwd
+
+# rsync -rltv /home/thea1603/projects/def-pmjodoin/thea1603/braindata/samtrack/datasets/samtrack_hcp105_train_128.hdf5 $SLURM_TMPDIR/
+# rsync -rltv /home/thea1603/projects/def-pmjodoin/thea1603/braindata/samtrack/datasets/samtrack_hcp105_valid_128.hdf5 $SLURM_TMPDIR/
+#
+mkdir -p $SCRATCH/braindata/labelseg/
+rsync -rltv /home/thea1603/projects/def-descotea/datasets/labelseg/hcp1200_pretrain.hdf5 $SCRATCH/braindata/labelseg/
+
+srun python scripts/labelseg_train.py labelseg hcp105 hcp1200_pretrain_1_xl $SCRATCH/braindata/labelseg/hcp1200_pretrain.hdf5  --batch-size 1 --epochs 1000 --lr 0.0001 --devices 4 --wm_drop_ratio 1 --prompt_strategy attention --volume_size 128 --warmup 50 --pretrain --nodes 2
