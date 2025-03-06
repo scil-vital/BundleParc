@@ -126,7 +126,7 @@ class LabelSegDataset(Dataset):
         bundle_labels[bundle_mask] += 1
 
         bundle_id = self.bundle_set.index(b)
-        bundle_onehot = np.zeros((len(self.bundle_set)))
+        bundle_onehot = np.zeros((len(self.bundle_set)), dtype=np.float32)
         bundle_onehot[bundle_id] = 1.
         prompt_data = bundle_onehot
 

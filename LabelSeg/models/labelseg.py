@@ -29,7 +29,9 @@ class LabelSeg(LightningModule):
         weight_decay: float = 0.1,
         warmup_t: int = 5,
         epochs: int = 1000,
+        channels=[32, 64, 128, 256, 512],
         ds: bool = False,
+        pretrained=False,
         model=None,
     ) -> None:
         """
@@ -41,7 +43,7 @@ class LabelSeg(LightningModule):
         super(LabelSeg, self).__init__()
         # Keep the name of the model
         self.hparams["name"] = self.__class__.__name__
-        self.pretrained = False
+        self.pretrained = pretrained
         self.prompt_strategy = prompt_strategy
         self.volume_size = volume_size
         self.bundles = bundles
@@ -55,9 +57,8 @@ class LabelSeg(LightningModule):
 
         self.in_chans = 28
         self.volume_size = volume_size
-        self.prompt_strategy = 'attention'
-        self.embed_dim = 32
-        self.bottleneck_dim = 512
+        self.prompt_strategy = prompt_strategy
+        self.channels = channels
         self.mask_prompt = mask_prompt
         self.n_bundles = len(self.bundles)
 
@@ -73,8 +74,9 @@ class LabelSeg(LightningModule):
         self.labelsegnet = model
         if model is None:
             self.labelsegnet = LabelSegNet(
-                self.in_chans, self.volume_size, self.prompt_strategy,
-                self.mask_prompt, self.embed_dim, self.bottleneck_dim,
+                self.in_chans, volume_size=self.volume_size,
+                prompt_strategy=self.prompt_strategy,
+                mask_prompt=self.mask_prompt, channels=self.channels,
                 n_bundles=self.n_bundles)
 
         if not self.pretrained:
