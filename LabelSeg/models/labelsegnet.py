@@ -460,14 +460,14 @@ class Head(nn.Module):
 
 class LabelSegNet(nn.Module):
 
-    def __init__(self, in_chans, volume_size=96,
-                 prompt_strategy='add',
+    def __init__(self, in_chans, volume_size=128,
+                 prompt_strategy='attention',
                  mask_prompt=True,
-                 embed_dim=32, bottleneck_dim=512, n_bundles=71):
+                 channels=[32, 64, 128, 256, 512], n_bundles=71):
         super().__init__()
 
-        self.channels = [32, 64, 128, 256, 512]
-        # self.channels = [64, 128, 256, 512, 1024]
+        self.channels = channels
+        # self.channels = [32, 64, 128, 256, 512]
 
         # Important to store this for loading the model later.
         self.in_chans = in_chans

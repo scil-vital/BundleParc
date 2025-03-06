@@ -35,9 +35,9 @@ def _build_arg_parser():
     # as well.
     data_g = parser.add_argument_group('Model')
     data_g.add_argument('--prompt_strategy', choices=['attention', 'add'],
-                        default='add',
+                        default='attention',
                         help='How to include prompts in the decoder.')
-    data_g.add_argument('--wm_drop_ratio', type=float, default=0.5,
+    data_g.add_argument('--wm_drop_ratio', type=float, default=1,
                         help='When training, how often to include the WM '
                              'mask.')
     data_g.add_argument('--volume_size', default=128, type=int,
@@ -73,6 +73,9 @@ def _build_arg_parser():
                          help='Pretraining')
     learn_g.add_argument('--ds', action='store_true',
                          help='Deep supervision.')
+    learn_g.add_argument('--channels', nargs='5', type=int,
+                         default=[32, 64, 128, 256, 512],
+                         help='Layer channels')
     learn_g.add_argument('--checkpoint', type=str,
                          help='Deep supervision.')
     return parser
@@ -147,6 +150,7 @@ def train(args, root_dir):
             betas=(args.beta1, args.beta2),
             weight_decay=args.weight_decay,
             warmup_t=args.warmup_t,
+            channels=args.channels,
             ds=args.ds)
 
     # # Train the model
