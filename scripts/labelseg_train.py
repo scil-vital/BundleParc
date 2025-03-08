@@ -7,11 +7,12 @@ from os.path import join
 
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import CometLogger
-from lightning.pytorch.strategies import FSDPStrategy
+# from lightning.pytorch.strategies import FSDPStrategy
 from lightning.pytorch.trainer import Trainer
 
 from LabelSeg.dataset.labelseg_data_module import LabelSegDataModule
 from LabelSeg.models.labelseg import LabelSeg
+# from LabelSeg.models.labelsegnet import TwoWayAttentionBlock3D
 from LabelSeg.models.utils import get_model
 
 # Set the default precision to float32 to
@@ -126,13 +127,17 @@ def train(args, root_dir):
     # Mixed precision is used to speed up training and
     # reduce memory usage
 
-    strategy = FSDPStrategy(
-        sharding_strategy="FULL_SHARD"
-    )
+    # strategy = FSDPStrategy(
+    #     sharding_strategy="FULL_SHARD",
+    #     cpu_offload=True,
+    #     limit_all_gathers=True,
+    #     activation_checkpointing_policy={
+    #         TwoWayAttentionBlock3D}
+    # )
 
     trainer = Trainer(
         devices=args.devices, num_nodes=args.nodes, accelerator='auto',
-        strategy=strategy,
+        strategy='fsdp',
         logger=comet_logger,
         log_every_n_steps=1,
         check_val_every_n_epoch=10,

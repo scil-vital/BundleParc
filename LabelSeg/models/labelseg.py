@@ -72,21 +72,24 @@ class LabelSeg(LightningModule):
         self.iou_metric = MeanIoU(ignore_empty=False)
 
         self.labelsegnet = model
-        if model is None:
+
+        if not self.pretrained:
+            self.save_hyperparameters()
+
+    def configure_model(self):
+        if self.labelsegnet is None:
             self.labelsegnet = LabelSegNet(
                 self.in_chans, volume_size=self.volume_size,
                 prompt_strategy=self.prompt_strategy,
                 mask_prompt=self.mask_prompt, channels=self.channels,
                 n_bundles=self.n_bundles)
 
-        if not self.pretrained:
-            self.save_hyperparameters()
-
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.labelsegnet.parameters(),
                                       lr=self.lr,
                                       weight_decay=self.weight_decay,
                                       betas=(0.9, 0.999))
+
         scheduler = CosineLRScheduler(optimizer, t_initial=5, lr_min=1e-7,
                                       cycle_limit=self.epochs,
                                       warmup_t=self.warmup_t,
@@ -153,7 +156,7 @@ class LabelSeg(LightningModule):
             # no truthy voxels. These cause NaNs which have to be removed.
             # Note sure if there is a better way.
             ce = self.ce(y_hat_ce, y_ce)
-            loss_ce = ce.nanmean()
+            loss_ce = torch.nan_to_num(ce.nanmean())
             assert not torch.isnan(loss_ce)
 
         # Mask prediction
