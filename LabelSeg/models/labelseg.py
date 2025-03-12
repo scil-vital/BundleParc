@@ -72,17 +72,15 @@ class LabelSeg(LightningModule):
         self.iou_metric = MeanIoU(ignore_empty=False)
 
         self.labelsegnet = model
-
-        if not self.pretrained:
-            self.save_hyperparameters()
-
-    def configure_model(self):
         if self.labelsegnet is None:
             self.labelsegnet = LabelSegNet(
                 self.in_chans, volume_size=self.volume_size,
                 prompt_strategy=self.prompt_strategy,
                 mask_prompt=self.mask_prompt, channels=self.channels,
                 n_bundles=self.n_bundles)
+
+        if not self.pretrained:
+            self.save_hyperparameters()
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.labelsegnet.parameters(),
