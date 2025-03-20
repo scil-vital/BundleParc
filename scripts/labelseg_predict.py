@@ -107,7 +107,6 @@ class LabelSeg():
         weights = gaussian_filter(float_mask, sigma=sigma)
         filtered /= (weights + 1e-8)
         filtered = filtered * bundle_mask
-
         # Label masking
         discrete_labels = bundle_label[bundle_mask.astype(bool)]
 

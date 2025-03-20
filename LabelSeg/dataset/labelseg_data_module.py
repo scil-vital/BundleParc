@@ -1,6 +1,6 @@
 import lightning.pytorch as pl
 
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 
 from LabelSeg.dataset.labelseg_dataset import LabelSegDataset
 from LabelSeg.dataset.labelseg_pretrain_dataset import LabelSegPretrainDataset
@@ -12,10 +12,8 @@ class LabelSegDataModule(pl.LightningDataModule):
 
     def __init__(
         self,
-        train_file: str,
-        val_file: str = None,
-        test_file: str = None,
-        wm_drop_ratio: float = 0.5,
+        file: str,
+        config_file: str,
         bundles=[],
         batch_size: int = 1,
         num_workers: int = 10,
@@ -38,13 +36,11 @@ class LabelSegDataModule(pl.LightningDataModule):
         """
 
         super().__init__()
-        self.train_file = train_file
-        self.val_file = val_file
-        self.test_file = test_file
+        self.file = file
+        self.config_file = config_file
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.wm_drop_ratio = wm_drop_ratio
         self.bundles = bundles
         self.pretrain = pretrain
 
@@ -63,29 +59,15 @@ class LabelSegDataModule(pl.LightningDataModule):
 
     def setup(self, stage: str):
         cls = LabelSegPretrainDataset if self.pretrain else LabelSegDataset
-        if self.val_file is None and self.test_file is None:
-            whole_data = cls(
-                self.train_file[0], self.wm_drop_ratio, self.bundles)
-            self.train, self.val, self.test = \
-                random_split(whole_data, [0.70, 0.20, 0.10],)
-            self.test.is_test = True
+        whole_data = cls(
+            self.file, self.config_file, self.bundles)
 
-            self.bundles = self.train.dataset.bundle_set
-            assert self.train.dataset.bundle_set == self.val.dataset.bundle_set
-        else:
-            # Assign train/val datasets for use in dataloaders
-            self.train = cls(
-                self.train_file, self.wm_drop_ratio, self.bundles)
+        train_idx, val_idx, test_idx = \
+            whole_data.train_idx, whole_data.val_idx, whole_data.test_idx
 
-            self.val = cls(
-                self.val_file, self.wm_drop_ratio, self.bundles)
-
-            # Assign test dataset for use in dataloader(s)
-            self.test = cls(
-                self.test_file, self.wm_drop_ratio, self.bundles, is_test=True)
-
-            self.bundles = self.train.bundle_set
-            assert self.train.bundle_set == self.val.bundle_set
+        self.train = Subset(whole_data, train_idx)
+        self.val = Subset(whole_data, val_idx)
+        self.test = Subset(whole_data, test_idx)
 
     def train_dataloader(self):
         """ Create the dataloader for the training set

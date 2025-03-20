@@ -46,9 +46,6 @@ def create_dataset(
             # Get the path to the FODF volume
             fodf_file = join(
                 subject, f'{sub_id}__fodf.nii.gz')
-            # Get the path to the WM mask
-            mask_wm_file = join(
-                subject, f'{sub_id}__mask_wm.nii.gz')
 
             # Load the FODF volume
             fodf_img = nib.load(fodf_file)
@@ -61,33 +58,15 @@ def create_dataset(
                                             interp='lin',
                                             enforce_dimensions=False)
 
-            # Load the WM mask
-            mask_wm_img = nib.load(mask_wm_file)
-
-            # Resampling WM mask
-            resampled_mask_wm = resample_volume(mask_wm_img, ref_img=None,
-                                                volume_shape=[volume_size],
-                                                iso_min=False,
-                                                voxel_res=None,
-                                                interp='nn',
-                                                enforce_dimensions=False)
-
             fodf_data = resampled_img.get_fdata().transpose((3, 0, 1, 2))
-            mask_wm_data = resampled_mask_wm.get_fdata()[None, ...]
 
             affine = resampled_img.affine
-            assert np.allclose(affine, resampled_mask_wm.affine, atol=1e-5), (
-                sub_id, np.abs(affine - resampled_mask_wm.affine))
 
             # Create a group for the subject
             group = f.create_group(sub_id)
 
             # Create a dataset for the FODF volume
             group.create_dataset('fodf', data=fodf_data[:nb_coeffs, ...],
-                                 compression="gzip", dtype=out_dtype)
-
-            # Create a dataset for the FODF volume
-            group.create_dataset('mask_wm', data=mask_wm_data,
                                  compression="gzip", dtype=out_dtype)
 
             # Create a dataset for the affine transformation matrix
@@ -104,7 +83,7 @@ def create_dataset(
                 except FileNotFoundError:
                     print('{} does not have a {}'.format(sub_id, b))
                     continue
-                reshaped_b_label = apply_transform(np.eye(4), mask_wm_img,
+                reshaped_b_label = apply_transform(np.eye(4), fodf_img,
                                                    b_label_img,
                                                    interp='nearest',
                                                    keep_dtype=True)
@@ -133,7 +112,7 @@ def main():
     parser.add_argument('output_file', help='Output HDF5 file')
     parser.add_argument('--volume_size', default=128, type=int,
                         help='Volume size to resample to.')
-    parser.add_argument('--sh_order', type=int, default=6,
+    parser.add_argument('--sh_order', type=int, default=8,
                         choices=[2, 4, 6, 8],
                         help='SH order to use.')
     parser.add_argument('--dtype', choices=['float16', 'float32'],
