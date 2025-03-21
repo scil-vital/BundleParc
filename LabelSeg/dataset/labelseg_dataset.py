@@ -9,6 +9,8 @@ from monai.transforms import (
     RandGaussianNoise)
 from torch.utils.data import Dataset
 
+from LabelSeg.dataset.transforms import RandDownSampleFODFOrderD
+
 # from scilpy.tractanalysis.streamlines_metrics import compute_tract_counts_map
 
 
@@ -74,6 +76,8 @@ class LabelSegDataset(Dataset):
         # TODO: Make this a dictionary transform as well
         self.gaussian = RandGaussianNoise(
             mean=0, std=0.05, prob=0.2)
+
+        self.fod_down = RandDownSampleFODFOrderD(prob=0.2)
 
         self.bundle_ids, self.train_idx, self.val_idx, self.test_idx \
             = self._compute_length(self.config_file)
@@ -189,6 +193,7 @@ class LabelSegDataset(Dataset):
 
         if not self.is_test:
             fodf_data = self.gaussian(fodf_data)
+            fodf_data = self.fod_down(fodf_data)
 
         return fodf_data, prompt_data, bundle_labels
 
