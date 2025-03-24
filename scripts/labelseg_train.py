@@ -115,17 +115,9 @@ def train(args, root_dir):
     # Mixed precision is used to speed up training and
     # reduce memory usage
 
-    # strategy = FSDPStrategy(
-    #     sharding_strategy="FULL_SHARD",
-    #     cpu_offload=True,
-    #     limit_all_gathers=True,
-    #     activation_checkpointing_policy={
-    #         TwoWayAttentionBlock3D}
-    # )
-
     trainer = Trainer(
         devices=args.devices, num_nodes=args.nodes, accelerator='auto',
-        strategy='fsdp',
+        strategy='ddp',
         logger=comet_logger,
         log_every_n_steps=1,
         check_val_every_n_epoch=10,

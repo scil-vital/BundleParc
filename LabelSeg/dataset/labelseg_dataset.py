@@ -103,19 +103,22 @@ class LabelSegDataset(Dataset):
                 val_split = config['valid']
                 test_split = config['test']
 
+                total_idx = 0
                 for i, subject_id in enumerate(f.keys()):
                     bundles = self.f[subject_id]['bundles'].keys()
                     for j, b in enumerate(bundles):
                         bundle_ids.append((subject_id, b))
 
                         if subject_id in train_split:
-                            train_idx.append((i * len(bundles)) + j)
+                            train_idx.append(total_idx)
 
                         elif subject_id in val_split:
-                            val_idx.append((i * len(bundles)) + j)
+                            val_idx.append(total_idx)
 
                         elif subject_id in test_split:
-                            test_idx.append((i * len(bundles)) + j)
+                            test_idx.append(total_idx)
+
+                        total_idx += 1
 
         return bundle_ids, train_idx, val_idx, test_idx
 

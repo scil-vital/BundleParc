@@ -126,27 +126,26 @@ class TwoWayAttentionBlock3D(nn.Module):
     def forward(
         self, queries: Tensor, keys: Tensor, query_pe: Tensor
     ) -> Tuple[Tensor, Tensor]:
-        # Cross attention block, tokens attending to image embedding
+
         q = queries + query_pe
         k = keys
 
-        attn_out = self.cross_attn_token_to_image(
-            q=q, k=k, v=keys)
-        queries = queries + attn_out
-        queries = self.norm2(queries)
+        # Cross attention block, image embedding attending to tokens
+        attn_out = self.cross_attn_image_to_token(
+            q=k, k=q, v=queries)
+        keys = keys + attn_out
+        keys = self.norm4(keys)
 
         # MLP block
         mlp_out = self.mlp(queries)
         queries = queries + mlp_out
         queries = self.norm3(queries)
 
-        # Cross attention block, image embedding attending to tokens
-        q = queries + query_pe
-        k = keys
-        attn_out = self.cross_attn_image_to_token(
-            q=k, k=q, v=queries)
-        keys = keys + attn_out
-        keys = self.norm4(keys)
+        # Cross attention block, tokens attending to image embedding
+        attn_out = self.cross_attn_token_to_image(
+            q=q, k=k, v=keys)
+        queries = queries + attn_out
+        queries = self.norm2(queries)
 
         return queries, keys
 
@@ -323,7 +322,6 @@ class DecoderNextLayer(nn.Module):
         self.tkn2img = TwoWayAttentionBlock3D(
             out_chans, 4, mlp_dim=out_chans * ratio)
         self.pe_layer = PositionalEncodingPermute3D(out_chans)
-        self._prompt_func = self._prompt_attn
 
     def _decode(self, z, encoder_feature):
         """ TODO """
@@ -353,7 +351,7 @@ class DecoderNextLayer(nn.Module):
         """ TODO """
         z = self._decode(z, encoder_feature)
         prompt_encoding = self.prompt_encoding(prompt_encoding)
-        z, prompt_encoding = self._prompt_func(
+        z, prompt_encoding = self._prompt_attn(
             z, prompt_encoding)
         z = self.conv2(z)  # maybe ?
         return z, prompt_encoding
@@ -393,17 +391,16 @@ class Stem(nn.Module):
     def __init__(self, in_chans: int, out_chans: int):
         super().__init__()
 
-        self.conv2 = nn.Conv3d(
+        self.conv = nn.Conv3d(
             in_chans, out_chans, kernel_size=1, stride=1)
 
-        # Use Xavier initialisation for weights
-        for m in self.modules():
-            if isinstance(m, nn.Conv3d) or isinstance(m, nn.ConvTranspose3d):
-                nn.init.xavier_uniform_(m.weight)
+        # # Use Xavier initialisation for weights
+        # for m in self.modules():
+        #     if isinstance(m, nn.Conv3d) or isinstance(m, nn.ConvTranspose3d):
+        #         nn.init.xavier_uniform_(m.weight)
 
-    def forward(self, x):
-        x = self.conv2(x)
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(x)
 
 
 class Head(nn.Module):
@@ -443,7 +440,8 @@ class LabelSegNet(nn.Module):
         self.n_bundles = n_bundles
 
         # Define the input branch
-        self.stem = Stem(in_chans, self.embed_dim)
+        self.stem = nn.Conv3d(
+            in_chans, self.embed_dim, kernel_size=1, stride=1)
 
         # Define the output head
         self.head = Head(self.channels[0])
@@ -459,7 +457,7 @@ class LabelSegNet(nn.Module):
     def forward(self, fodf, bundle_prompt):
         """ Forward pass of the model. """
 
-        B, C, X, Y, Z = fodf.shape
+        # B, C, X, Y, Z = fodf.shape
 
         z, encoder_features = self.encode(fodf)
         y_hat = self.decode(z, encoder_features, bundle_prompt)
@@ -468,15 +466,14 @@ class LabelSegNet(nn.Module):
 
     def encode(self, fodf):
         """ Forward pass of the model's encoder. """
-        B, C, X, Y, Z = fodf.shape
+        # B, C, X, Y, Z = fodf.shape
 
         # Embed the input fodf
-        input_embedding = self.stem(fodf)
+        x = self.stem(fodf)
 
         # Run the encoders for the input fodf
         # TODO: Consider using a single encoder for both ?
         encoder_features = []
-        x = input_embedding
         for encoder_layer in self.encoder.layers:
             x, x_res = encoder_layer(x)
             encoder_features.insert(0, x_res)

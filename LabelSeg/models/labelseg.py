@@ -93,6 +93,13 @@ class LabelSeg(LightningModule):
             },
         }
 
+    # def on_after_backward(self) -> None:
+    #     print("on_after_backward enter")
+    #     for n, p in self.labelsegnet.named_parameters():
+    #         if p.requires_grad and p.grad is None:
+    #             print(n)
+    #     print("on_after_backward exit")
+
     def lr_scheduler_step(self, scheduler, metric):
         scheduler.step(epoch=self.current_epoch)
         # timm's scheduler need the epoch value
