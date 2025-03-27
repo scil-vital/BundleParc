@@ -172,3 +172,10 @@ cython_debug/
 .nii.gz
 .tck
 .trk
+
+# Vim swap files
+.swp
+.swo
+.swp
+.swq
+.swn

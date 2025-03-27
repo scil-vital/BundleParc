@@ -1,3 +1,5 @@
+import numpy as np
+
 from monai.transforms import RandomizableTransform
 
 
@@ -32,4 +34,4 @@ class RandDownSampleFODFOrderD(RandomizableTransform):
         self.randomize()
         if self._do_transform:
             img[self._nb_coeff:] = 0.
-        return img
+        return np.ascontiguousarray(img)

@@ -51,11 +51,12 @@ class Attention(nn.Module):
     def _separate_heads(self, x: Tensor, num_heads: int) -> Tensor:
         b, n, c = x.shape
         x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+        # B x N_heads x N_tokens x C_per_head
+        return x.transpose(1, 2).contiguous()
 
     def _recombine_heads(self, x: Tensor) -> Tensor:
         b, n_heads, n_tokens, c_per_head = x.shape
-        x = x.transpose(1, 2)
+        x = x.transpose(1, 2).contiguous()
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
     def forward(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
@@ -336,13 +337,13 @@ class DecoderNextLayer(nn.Module):
         prompt_encoding = prompt_encoding[:, None, :]
         pe = self.pe_layer(z)
 
-        image_embedding = (z).flatten(2).permute(0, 2, 1)
-        pe = pe.flatten(2).permute(0, 2, 1)
+        image_embedding = (z).flatten(2).permute(0, 2, 1).contiguous()
+        pe = pe.flatten(2).permute(0, 2, 1).contiguous()
 
         z, prompt_encoding = self.tkn2img(
             image_embedding, prompt_encoding, pe)
 
-        z = z.permute(0, 2, 1).reshape((B, C, X, Y, Z))
+        z = z.permute(0, 2, 1).reshape((B, C, X, Y, Z)).contiguous()
         prompt_encoding = prompt_encoding[:, 0, :]
 
         return z, prompt_encoding
