@@ -21,12 +21,11 @@ def get_model(checkpoint_file, kwargs={}):
         # Add other architectures here
         'LabelSeg': LabelSeg,
     }
-
+    # TODO: investigate why hparams are not in checkpoint
     hyper_parameters = checkpoint["hyper_parameters"]
-    hyper_parameters.update({'pretrained': True, 'in_chans': 28,
-                             'volume_size': 128, 'embed_dim': 32,
-                             'bottleneck_dim': 512,
-                             'prompt_strategy': 'attention', 'n_bundles': 71})
+    kwargs.update({
+        'in_chans': 45,
+        'bundles': checkpoint['datamodule_hyper_parameters']['bundles']})
 
     # Load it from the checkpoint
     try:
@@ -37,12 +36,7 @@ def get_model(checkpoint_file, kwargs={}):
         # we need to specify map_location=torch.device('cpu')
         model = models[hyper_parameters[
             'name']].load_from_checkpoint(
-                checkpoint_file, map_location=torch.device('cpu'))
-
-    new_checkpoint = {'hyperparameters': hyper_parameters,
-                      'state_dict': model.labelsegnet.state_dict()}
-
-    torch.save(new_checkpoint, 'labelsegnet.ckpt')
+                checkpoint_file, **kwargs, map_location=torch.device('cpu'))
 
     # Put the model in eval mode to fix dropout and other stuff
     model.eval()
