@@ -3,13 +3,29 @@
 """
 BundleParc: automatic tract labelling without tractography.
 
-This method takes as input fODF maps of order 6 of descoteaux07 basis and a WM
-mask and outputs 71 bundle label maps. These maps can then be used to perform
-tractometry/tract profiling/radiomics. The bundle definitions follow TractSeg's
-minus the whole CC.
+This method takes as input fODF maps and outputs 71 bundle label maps. These maps can then be used to perform tractometry/tract profiling/radiomics. The bundle definitions follow TractSeg's minus the whole CC.
 
-To cite: Antoine Théberge, Zineb El Yamani, François Rheault, Maxime Descoteaux, Pierre-Marc Jodoin (2025). BundleParc. ISMRM Workshop on 40 Years of Diffusion: Past, Present & Future Perspectives, Kyoto, Japan.  # noqa
+Example usage:
+    $ scil_fodf_bundleparc.py fodf.nii.gz --out_prefix sub-001__
+
+Example output:
+    sub-001__AF_left.nii.gz, sub-001__AF_right.nii.gz, ..., sub-001__UF_right.nii.gz
+
+The output can be further processed with scil_bundle_mean_std.py to compute statistics for each bundle.
+
+This script requires PyTorch to be installed. To install it, see the official website: https://pytorch.org/get-started/locally/
+
+This script requires a GPU with ~6GB of available memory. If you use
+half-precision (float16) inference, you may be able to run it with ~3GB of
+GPU memory available. Otherwise, install the CPU version of PyTorch.
+
+Parts of the implementation are based on or lifted from:
+    SAM-Med3D: https://github.com/uni-medical/SAM-Med3D
+    Multidimensional Positional Encoding: https://github.com/tatp22/multidim-positional-encoding
+
+To cite: Antoine Théberge, Zineb El Yamani, François Rheault, Maxime Descoteaux, Pierre-Marc Jodoin (2025). LabelSeg. ISMRM Workshop on 40 Years of Diffusion: Past, Present & Future Perspectives, Kyoto, Japan.  # noqa
 """
+
 
 import argparse
 import nibabel as nib
@@ -284,7 +300,7 @@ def parse_args():
 
 
 def _download_weights(path=DEFAULT_CKPT):
-    url = 'https://zenodo.org/records/14779787/files/bundleparc.ckpt'
+    url = 'https://zenodo.org/records/15579498/files/123_4_5_bundleparc.ckpt'
     os.makedirs(os.path.dirname(path))
     print('Downloading weights ...')
     with requests.get(url, stream=True) as r:
