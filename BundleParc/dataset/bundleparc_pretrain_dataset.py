@@ -4,10 +4,10 @@ import numpy as np
 from h5py import File
 
 
-from LabelSeg.dataset.labelseg_dataset import LabelSegDataset
+from BundleParc.dataset.bundleparc_dataset import BundleParcDataset
 
 
-class LabelSegPretrainDataset(LabelSegDataset):
+class BundleParcPretrainDataset(BundleParcDataset):
     """ Dataset for FODF volumes stored in a HDF5 file.
     """
 

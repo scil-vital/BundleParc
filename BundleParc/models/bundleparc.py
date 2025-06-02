@@ -13,10 +13,10 @@ from monai.metrics.meandice import DiceMetric
 from monai.metrics.meaniou import MeanIoU
 from timm.scheduler.cosine_lr import CosineLRScheduler
 
-from LabelSeg.models.labelsegnet import LabelSegNet
+from BundleParc.models.bundleparcnet import BundleParcNet
 
 
-class LabelSeg(LightningModule):
+class BundleParc(LightningModule):
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class LabelSeg(LightningModule):
         Parameters:
         -----------
         """
-        super(LabelSeg, self).__init__()
+        super(BundleParc, self).__init__()
         # Keep the name of the model
         self.hparams["name"] = self.__class__.__name__
         self.pretrained = pretrained
@@ -65,9 +65,9 @@ class LabelSeg(LightningModule):
             ignore_empty=False, num_classes=2)
         self.iou_metric = MeanIoU(ignore_empty=False)
 
-        self.labelsegnet = model
-        if self.labelsegnet is None:
-            self.labelsegnet = LabelSegNet(
+        self.bundleparcnet = model
+        if self.bundleparcnet is None:
+            self.bundleparcnet = BundleParcNet(
                 self.in_chans, volume_size=self.volume_size,
                 channels=self.channels, n_bundles=self.n_bundles)
 
@@ -75,7 +75,7 @@ class LabelSeg(LightningModule):
             self.save_hyperparameters()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.labelsegnet.parameters(),
+        optimizer = torch.optim.AdamW(self.bundleparcnet.parameters(),
                                       lr=self.lr,
                                       weight_decay=self.weight_decay,
                                       betas=(0.9, 0.999))
@@ -95,7 +95,7 @@ class LabelSeg(LightningModule):
 
     # def on_after_backward(self) -> None:
     #     print("on_after_backward enter")
-    #     for n, p in self.labelsegnet.named_parameters():
+    #     for n, p in self.bundleparcnet.named_parameters():
     #         if p.requires_grad and p.grad is None:
     #             print(n)
     #     print("on_after_backward exit")
@@ -187,7 +187,7 @@ class LabelSeg(LightningModule):
         y: List[torch.Tensor]
             The predicted labels and masks at different scales
         """
-        y = self.labelsegnet(x, p)
+        y = self.bundleparcnet(x, p)
 
         return y
 

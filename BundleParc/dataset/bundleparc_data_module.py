@@ -2,11 +2,11 @@ import lightning.pytorch as pl
 
 from torch.utils.data import DataLoader, Subset
 
-from LabelSeg.dataset.labelseg_dataset import LabelSegDataset
-from LabelSeg.dataset.labelseg_pretrain_dataset import LabelSegPretrainDataset
+from BundleParc.dataset.bundleparc_dataset import BundleParcDataset
+from BundleParc.dataset.bundleparc_pretrain_dataset import BundleParcPretrainDataset
 
 
-class LabelSegDataModule(pl.LightningDataModule):
+class BundleParcDataModule(pl.LightningDataModule):
     """
     """
 
@@ -58,7 +58,7 @@ class LabelSegDataModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage: str):
-        cls = LabelSegPretrainDataset if self.pretrain else LabelSegDataset
+        cls = BundleParcPretrainDataset if self.pretrain else BundleParcDataset
         whole_data = cls(
             self.file, self.config_file, self.bundles)
 

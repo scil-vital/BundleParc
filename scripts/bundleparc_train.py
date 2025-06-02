@@ -10,10 +10,10 @@ from lightning.pytorch.loggers import CometLogger
 # from lightning.pytorch.strategies import FSDPStrategy
 from lightning.pytorch.trainer import Trainer
 
-from LabelSeg.dataset.labelseg_data_module import LabelSegDataModule
-from LabelSeg.models.labelseg import LabelSeg
-# from LabelSeg.models.labelsegnet import TwoWayAttentionBlock3D
-from LabelSeg.models.utils import get_model
+from BundleParc.dataset.bundleparc_data_module import BundleParcDataModule
+from BundleParc.models.bundleparc import BundleParc
+# from BundleParc.models.bundleparcnet import TwoWayAttentionBlock3D
+from BundleParc.models.utils import get_model
 
 # Set the default precision to float32 to
 # speed up training and reduce memory usage
@@ -90,7 +90,7 @@ def train(args, root_dir):
     if args.test and not args.checkpoint:
         raise ValueError('No point in testing if the model is not trained.')
 
-    dm = LabelSegDataModule(
+    dm = BundleParcDataModule(
         args.data,
         args.config,
         bundles=args.bundles,
@@ -104,7 +104,7 @@ def train(args, root_dir):
 
     # # Log parameters
     comet_logger.log_hyperparams({
-        "model": LabelSeg.__name__,
+        "model": BundleParc.__name__,
         "epochs": args.epochs})
 
     # Log the learning rate during training as it will vary
@@ -137,7 +137,7 @@ def train(args, root_dir):
         model = get_model(args.checkpoint, {'pretrained': True})
         model.train()
     else:
-        model = LabelSeg(
+        model = BundleParc(
             in_chans=args.in_channels,
             volume_size=args.volume_size,
             channels=args.channels,

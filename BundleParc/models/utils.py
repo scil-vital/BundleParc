@@ -1,6 +1,6 @@
 import torch
 
-from LabelSeg.models.labelseg import LabelSeg
+from BundleParc.models.bundleparc import BundleParc
 
 
 def get_model(checkpoint_file, kwargs={}):
@@ -19,7 +19,7 @@ def get_model(checkpoint_file, kwargs={}):
     # The model's class is saved in hparams
     models = {
         # Add other architectures here
-        'LabelSeg': LabelSeg,
+        'BundleParc': BundleParc,
     }
     # TODO: investigate why hparams are not in checkpoint
     hyper_parameters = checkpoint["hyper_parameters"]

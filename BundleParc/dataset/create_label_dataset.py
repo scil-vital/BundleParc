@@ -19,7 +19,7 @@ from tqdm import tqdm
 from scilpy.image.volume_operations import resample_volume, apply_transform
 from scilpy.io.utils import add_overwrite_arg, assert_outputs_exist
 
-from LabelSeg.utils.constants import TRACTSEG_BUNDLES
+from BundleParc.utils.constants import TRACTSEG_BUNDLES
 
 
 def create_dataset(

@@ -5,7 +5,7 @@ from typing import Tuple, Type
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from LabelSeg.models.encodings import PositionalEncodingPermute3D
+from BundleParc.models.encodings import PositionalEncodingPermute3D
 
 # TODO: Cite MedSAM3D
 
@@ -358,7 +358,7 @@ class DecoderNextLayer(nn.Module):
         return z, prompt_encoding
 
 
-class LabelSegNetDecoder(nn.Module):
+class BundleParcNetDecoder(nn.Module):
     """ MedNeXt decoder with 4 decoder layers. """
 
     def __init__(
@@ -424,7 +424,7 @@ class Head(nn.Module):
         return x
 
 
-class LabelSegNet(nn.Module):
+class BundleParcNet(nn.Module):
 
     def __init__(self, in_chans, volume_size=128,
                  channels=[32, 64, 128, 256, 512], n_bundles=71):
@@ -450,7 +450,7 @@ class LabelSegNet(nn.Module):
         # Define the model
         self.encoder = UNextEncoder(self.channels)
         self.bottleneck = ConvNextBlock(self.bottleneck_dim, ratio=4)
-        self.decoder = LabelSegNetDecoder(channels=self.channels[::-1])
+        self.decoder = BundleParcNetDecoder(channels=self.channels[::-1])
 
         self.prompt_embedding = nn.Sequential(
             nn.Linear(n_bundles, self.bottleneck_dim), nn.GELU())

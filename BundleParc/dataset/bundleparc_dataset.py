@@ -9,12 +9,12 @@ from monai.transforms import (
     RandGaussianNoise)
 from torch.utils.data import Dataset
 
-from LabelSeg.dataset.transforms import RandDownSampleFODFOrderD
+from BundleParc.dataset.transforms import RandDownSampleFODFOrderD
 
 # from scilpy.tractanalysis.streamlines_metrics import compute_tract_counts_map
 
 
-class LabelSegDataset(Dataset):
+class BundleParcDataset(Dataset):
     """ Dataset for FODF volumes stored in a HDF5 file.
     """
 

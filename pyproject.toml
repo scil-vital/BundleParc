@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=40.1.0", "wheel", "cython", "toml"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["LabelSeg", "scripts"]
+packages = ["BundleParc", "scripts"]
 
 [project]
-name = "LabelSeg"
+name = "BundleParc"
 authors = [
     {name = "Antoine Théberge", email = "antoine.theberge@usherbrooke.ca"},
 ]
-description = "LabelSeg"
+description = "BundleParc"
 readme = "README.md"
 requires-python = ">=3.10"
 keywords = [""]
@@ -33,8 +33,8 @@ dependencies = [
 version = "0.0.1"
 
 [project.scripts]
-labelseg_train = "scripts.labelseg_train:main"
-labelseg_predict = "scripts.labelseg_predict:main"
+bundleparc_train = "scripts.bundleparc_train:main"
+bundleparc_predict = "scripts.bundleparc_predict:main"
 
 # ... other project metadata fields as listed in:
 #     https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
