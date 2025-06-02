@@ -52,6 +52,8 @@ def _build_arg_parser():
                          help='Weights to initialize training.')
 
     learn_g = parser.add_argument_group('Learning')
+    learn_g.add_argument('--test', action='store_true',
+                         help='Do not train, only test.')
     learn_g.add_argument('--epochs', type=int, default=100,
                          help='Number of epochs')
     learn_g.add_argument('--lr', type=float, default=0.0001,
@@ -84,6 +86,9 @@ def _build_arg_parser():
 
 def train(args, root_dir):
     """ Train the model. """
+
+    if args.test and not args.checkpoint:
+        raise ValueError('No point in testing if the model is not trained.')
 
     dm = LabelSegDataModule(
         args.data,
@@ -142,10 +147,12 @@ def train(args, root_dir):
             weight_decay=args.weight_decay,
             warmup_t=args.warmup_t)
 
-    # # Train the model
-    trainer.fit(model, dm)
+    if not args.test:
+
+        # # Train the model
+        trainer.fit(model, dm)
     # Test the model
-    trainer.test(model, dm, ckpt_path='last')
+    trainer.test(model, dm)
 
 
 def main():

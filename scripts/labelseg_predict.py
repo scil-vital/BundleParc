@@ -19,10 +19,11 @@ import requests
 import torch
 
 from argparse import RawTextHelpFormatter
+from pathlib import Path
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, label, binary_dilation
 
 from scilpy.io.utils import (
     assert_inputs_exist, assert_outputs_exist, add_overwrite_arg)
@@ -59,16 +60,78 @@ class LabelSeg():
         self.checkpoint = dto['checkpoint']
         self.img_size = 128  # TODO: get image size from model
         self.fodf = dto['in_fodf']
-        self.wm = dto['in_wm']
         self.bundles = DEFAULT_BUNDLES
         self.nb_labels = dto['nb_pts']
         self.half = dto['half_precision']
         self.out_prefix = dto['out_prefix']
         self.out_folder = dto['out_folder']
-        self.n_coefs = int(
-            (6 + 2) * (6 + 1) // 2)  # TODO: infer sh order from model
+        self.pft_maps = dto['pft_maps']
+        self.min_blob_size = dto['min_blob_size']
+        self.keep_biggest_blob = dto['keep_biggest_blob']
 
-    def post_process_mask(self, mask, bundle_name):
+        self.n_coefs = int(
+            (8 + 2) * (8 + 1) // 2)  # TODO: infer sh order from model
+
+    def _get_outer_shell(self, label, next_label):
+        dilated_data = binary_dilation(label, iterations=1)
+        inter_data = dilated_data * next_label
+
+        outer_shell = dilated_data - (label + inter_data)
+
+        return outer_shell
+
+    def compute_pft_maps(self, label_map):
+        """ Compute PFT-stype maps. 'map_include' is computed as
+        the outer shell of the first and last labels. 'interface' is
+        the first and last labels. 'map_exclude' is everything outside
+        the bundle, including the 'map_include'.
+
+        Parameters
+        ----------
+        label_map: nib.Nifti1Image
+            label map
+
+        Returns
+        -------
+        map_include: nib.Nifti1Image
+
+        map_exclude: nib.Nifti1Image
+
+        interface: nib.Nifti1Image
+        """
+
+        label_data = label_map.get_fdata(dtype=np.float32)
+        bin_label = (label_data > 0).astype(np.uint8)
+
+        first, last = 1, label_data.max()
+        second, second_to_last = 2, last - 1
+
+        first_label, second_label = label_data == first, label_data == second
+        last_label, second_to_last_label = label_data == last, \
+            label_data == second_to_last
+
+        outer_first = self._get_outer_shell(
+            first_label.astype(np.uint8), second_label.astype(np.uint8))
+        outer_last = self._get_outer_shell(
+            last_label.astype(np.uint8), second_to_last_label.astype(np.uint8))
+
+        map_include = outer_first + outer_last
+        interface = first_label + last_label
+        map_exclude = 1 - ((bin_label + map_include) > 0)
+
+        include_img = nib.Nifti1Image(
+            map_include.astype(np.float32), label_map.affine, label_map.header)
+        exclude_img = nib.Nifti1Image(
+            map_exclude.astype(np.float32), label_map.affine, label_map.header)
+        interface_img = nib.Nifti1Image(
+            interface.astype(np.float32), label_map.affine, label_map.header)
+        seeding_img = nib.Nifti1Image(
+            bin_label.astype(np.float32), label_map.affine, label_map.header)
+
+        return include_img, exclude_img, interface_img, seeding_img
+
+    def post_process_mask(self, mask, bundle_name,
+                          min_blob_size=100, keep_biggest_blob=False):
         """ TODO
         """
         # Get the blobs in the image. Ideally, a mask only has one blob.
@@ -76,20 +139,27 @@ class LabelSeg():
         # voxels. TODO: handle these cases differently.
         bundle_mask = (mask > 0.5)
 
-        # # TODO: investigate blobs
-        # blobs, nb = ndi.label(bundle_mask)
+        # TODO: investigate blobs
+        blobs, nb = label(bundle_mask)
 
-        # # No need to process, return the mask
-        # if nb <= 1:
-        #     return bundle_mask.astype(np.uint8)
+        # No need to process, return the mask
+        if nb <= 1:
+            return bundle_mask.astype(np.uint8)
 
-        # # Calculate the size of each blob
-        # blob_sizes = np.bincount(blobs.ravel())
-        # new_mask = np.zeros_like(bundle_mask)
-        # # Remove blobs under a certain size (100)
-        # for i in range(1, len(blob_sizes[1:])):
-        #     if blob_sizes[i] > 1:
-        #         new_mask[blobs == i] = 1
+        # Calculate the size of each blob
+        blob_sizes = np.bincount(blobs.ravel())
+        new_mask = np.zeros_like(bundle_mask)
+
+        if keep_biggest_blob:
+            print("WARNING: More than one blob, keeping largest")
+            biggest_blob = np.argmax(blob_sizes[1:])
+            new_mask[blobs == biggest_blob + 1] = 1
+            return new_mask
+
+        # Remove blobs under a certain size (100)
+        for i in range(1, len(blob_sizes[1:])):
+            if blob_sizes[i] >= min_blob_size:
+                new_mask[blobs == i] = 1
 
         return bundle_mask.astype(np.uint8)
 
@@ -101,6 +171,8 @@ class LabelSeg():
         https://stackoverflow.com/questions/59685140/python-perform-blur-only-within-a-mask-of-image  # noqa
         """
 
+        out_type = np.uint16 if nb_labels > 1 else np.uint8
+
         # Masked convolution
         float_mask = bundle_mask.astype(float)
         filtered = gaussian_filter(bundle_label * float_mask, sigma=sigma)
@@ -111,20 +183,19 @@ class LabelSeg():
         discrete_labels = bundle_label[bundle_mask.astype(bool)]
 
         # Label dicretizing
-        discrete_labels = np.round(discrete_labels * nb_labels)
+        discrete_labels = np.ceil(discrete_labels * nb_labels)
         bundle_label[bundle_mask.astype(bool)] = discrete_labels
         bundle_label[~bundle_mask.astype(bool)] = 0
 
-        return bundle_label.astype(np.int32)
+        return bundle_label.astype(out_type)
 
     @torch.no_grad()
-    def predict(self, model, fodf, wm):
+    def predict(self, model, fodf, min_blob_size, keep_biggest_blob):
         """
         """
         nb_bundles = len(self.bundles)
         fodf_data = fodf.get_fdata().transpose(
             (3, 0, 1, 2))[:self.n_coefs, ...]  # TODO: get from model
-        wm_data = wm.get_fdata()[None, ...]
 
         # z-score norm
         mean = np.mean(fodf_data)
@@ -142,21 +213,16 @@ class LabelSeg():
                 dtype=torch.float
             ).to('cuda:0')
 
-            wm_prompt = torch.tensor(
-                wm_data,
-                dtype=torch.float
-            ).to('cuda:0')
-
             prompts = torch.eye(len(self.bundles), device=get_device())
 
-            z, encoder_features, mask_features = model.labelsegnet.encode(
-                data[None, ...], wm_prompt[None, ...])
+            z, encoder_features = model.labelsegnet.encode(
+                data[None, ...])
 
             for i in pbar:
                 pbar.set_description(self.bundles[i])
 
                 y_hat = F.sigmoid(model.labelsegnet.decode(
-                    z, encoder_features, mask_features, prompts[None, i, ...]
+                    z, encoder_features, prompts[None, i, ...]
                 )[-1]).squeeze()
 
                 y_hat_np = to_numpy(y_hat)
@@ -164,7 +230,8 @@ class LabelSeg():
                 bundle_label = y_hat_np[1]
 
                 bundle_mask = self.post_process_mask(
-                    bundle_mask, self.bundles[i])
+                    bundle_mask, self.bundles[i], min_blob_size=min_blob_size,
+                    keep_biggest_blob=keep_biggest_blob)
                 bundle_label = self.post_process_labels(
                     bundle_label, bundle_mask, self.nb_labels)
 
@@ -175,15 +242,15 @@ class LabelSeg():
         Main method where the magic happens
         """
         fodf_in = nib.load(self.fodf)
-        wm_in = nib.load(self.wm)
 
         # TODO in future release: infer sh order from model
-        n_coefs = 28
-        actual_coefs = fodf_in.get_fdata().shape[-1]
-        assert actual_coefs >= n_coefs, \
+        n_coefs = 45
+        X, Y, Z, C = fodf_in.get_fdata().shape
+
+        assert C >= n_coefs, \
             f'Input fODFs should have at least {n_coefs} coefficients.'
 
-        if actual_coefs > n_coefs:
+        if C > n_coefs:
             print('Input fODFs have more than 28 coefficients. '
                   f'Only the first {n_coefs} will be used.')
 
@@ -195,36 +262,48 @@ class LabelSeg():
                                         interp='lin',
                                         enforce_dimensions=False)
 
-        resampled_wm = resample_volume(wm_in, ref_img=None,
-                                       volume_shape=[self.img_size],
-                                       iso_min=False,
-                                       voxel_res=None,
-                                       interp='nn',
-                                       enforce_dimensions=False)
-
         # Load the model
         model = get_model(self.checkpoint, {'pretrained': True})
 
         # Predict label maps. `self.predict` is a generator
         # yielding one label map per bundle (and a binary mask)
         for y_hat_label, b_name in self.predict(
-            model, resampled_img, resampled_wm
+            model, resampled_img, self.min_blob_size, self.keep_biggest_blob
         ):
+
+            Path(os.path.join(self.out_folder, b_name)).mkdir(exist_ok=True)
+
             # Format the output as a nifti image
             label_img = nib.Nifti1Image(y_hat_label,
-                                        resampled_wm.affine,
-                                        resampled_wm.header)
+                                        resampled_img.affine,
+                                        resampled_img.header, dtype=np.uint16)
 
-            # Resample the image back to its original resolution
-            label_img = resample_volume(label_img, ref_img=wm_in,
-                                        # volume_shape=shape,
-                                        iso_min=False,
-                                        voxel_res=None,
-                                        interp='nn',
-                                        enforce_dimensions=False)
+            # Resampling volume to fit the model's input at training time
+            resampled_label = resample_volume(label_img, ref_img=None,
+                                              volume_shape=[X, Y, Z],
+                                              iso_min=False,
+                                              voxel_res=None,
+                                              interp='nn',
+                                              enforce_dimensions=False)
             # Save it
-            nib.save(label_img, os.path.join(
-                self.out_folder, self.out_prefix + f'{b_name}.nii.gz'))
+            nib.save(resampled_label, os.path.join(
+                self.out_folder, b_name, 'labels_map.nii.gz'))
+
+            if self.pft_maps:
+                map_include, map_exclude, interface, seeding_img = \
+                        self.compute_pft_maps(resampled_label)
+
+                nib.save(map_include, os.path.join(
+                    self.out_folder, b_name, 'map_include.nii.gz'))
+
+                nib.save(map_exclude, os.path.join(
+                    self.out_folder, b_name, 'map_exclude.nii.gz'))
+
+                nib.save(interface, os.path.join(
+                    self.out_folder, b_name, 'interface.nii.gz'))
+
+                nib.save(seeding_img, os.path.join(
+                    self.out_folder, b_name, 'seeding.nii.gz'))
 
 
 def _build_arg_parser(parser):
@@ -232,13 +311,14 @@ def _build_arg_parser(parser):
                         help='fODF input of order 6 or above. If the input '
                              'has more than 28 coefficients, only the first 28'
                              ' will be used.')
-    parser.add_argument('in_wm', type=str,
-                        help='Whole-brain WM mask input.')
     parser.add_argument('--out_prefix', type=str, default='',
                         help='Output file prefix. Default is nothing. ')
-    parser.add_argument('--out_folder', type=str, default='',
+    parser.add_argument('--out_folder', type=str, default='.',
                         help='Output destination. Default is the current '
                              'directory.')
+    parser.add_argument('--pft_maps', action='store_true',
+                        help='Output PFT-stype maps to track in predicted '
+                             'bundles.')
     parser.add_argument('--nb_pts', type=int, default=50,
                         help='Number of divisions per bundle. '
                              'Default is [%(default)s].')
@@ -246,6 +326,10 @@ def _build_arg_parser(parser):
                         help='Use half precision (float16) for inference. '
                              'This reduces memory usage but may lead to '
                              'reduced accuracy.')
+    parser.add_argument('--min_blob_size', type=int, default=100,
+                        help='Mininum blob size to keep.')
+    parser.add_argument('--keep_biggest_blob', action='store_true',
+                        help='Only keep the biggest blob.')
     parser.add_argument('--checkpoint', type=str,
                         default=DEFAULT_CKPT,
                         help='Checkpoint (.ckpt) containing hyperparameters '
