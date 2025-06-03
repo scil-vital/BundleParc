@@ -30,11 +30,11 @@ dependencies = [
     "scilpy",
     'importlib-metadata; python_version<"3.10"',
 ]
-version = "0.0.1"
+version = "1.0.0"
 
 [project.scripts]
-bundleparc_train = "scripts.bundleparc_train:main"
-bundleparc_predict = "scripts.bundleparc_predict:main"
+"bundleparc_train.py" = "scripts.bundleparc_train:main"
+"bundleparc_predict.py" = "scripts.bundleparc_predict:main"
 
 # ... other project metadata fields as listed in:
 #     https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
