@@ -133,7 +133,7 @@ def main():
     for y_hat_label, b_name in predict(
         model, resampled_img, n_coefs, args.nb_pts, bundles,
         args.min_blob_size, args.keep_biggest_blob, args.half_precision,
-        logging.getLogger().getEffectiveLevel() == logging.INFO
+        logging.getLogger().getEffectiveLevel() < logging.WARNING
     ):
 
         Path(os.path.join(args.out_folder, b_name)).mkdir(exist_ok=True)

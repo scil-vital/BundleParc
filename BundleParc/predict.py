@@ -41,7 +41,7 @@ def post_process_mask(
     new_mask = np.zeros_like(bundle_mask)
 
     if keep_biggest_blob:
-        logging.warning("More than one blob, keeping largest")
+        logging.debug(f"More than one blob in {bundle_name}, keeping largest")
         biggest_blob = np.argmax(blob_sizes[1:])
         new_mask[blobs == biggest_blob + 1] = 1
         return new_mask
@@ -52,7 +52,7 @@ def post_process_mask(
         if blob_sizes[i] >= min_blob_size:
             new_mask[blobs == i] = 1
             new_nb_blobs += 1
-    logging.warning(f'Kept {new_nb_blobs} blob out of {nb} in {bundle_name}.')
+    logging.debug(f'Kept {new_nb_blobs} blob out of {nb} in {bundle_name}.')
     return bundle_mask.astype(np.uint8)
 
 
@@ -147,7 +147,7 @@ def predict(
     std = np.std(fodf_data)
     fodf_data = (fodf_data - mean) / std
 
-    pbar = tqdm(range(nb_bundles))
+    pbar = tqdm(range(nb_bundles), disable=not verbose)
 
     with torch.amp.autocast(str(device), enabled=half_precision):
 
