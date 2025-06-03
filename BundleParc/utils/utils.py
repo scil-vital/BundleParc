@@ -68,5 +68,7 @@ def download_weights(path=DEFAULT_CKPT):
     print('Downloading weights ...')
     with requests.get(url, stream=True) as r:
         with open(path, 'wb') as f:
-            f.write(r.content)
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:  # Filter out keep-alive chunks
+                    f.write(r.content)
     print('Done !')
