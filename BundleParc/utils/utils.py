@@ -70,5 +70,5 @@ def download_weights(path=DEFAULT_CKPT):
         with open(path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):
                 if chunk:  # Filter out keep-alive chunks
-                    f.write(r.content)
+                    f.write(chunk)
     print('Done !')
