@@ -179,3 +179,10 @@ cython_debug/
 .swp
 .swq
 .swn
+
+# Working stuff
+ccscripts/
+custom_scripts/
+
+# Checkpoint
+**/*.ckpt
