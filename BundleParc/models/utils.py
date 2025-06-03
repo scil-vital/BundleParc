@@ -23,10 +23,10 @@ def get_model(checkpoint_file, kwargs={}):
     }
     # TODO: investigate why hparams are not in checkpoint
     hyper_parameters = checkpoint["hyper_parameters"]
-    print(hyper_parameters.keys())
-    # kwargs.update({
-    #     'in_chans': 45,
-    #     'bundles': checkpoint['datamodule_hyper_parameters']['bundles']})
+    bundles = checkpoint['datamodule_hyper_parameters']['bundles']
+    kwargs.update({
+        'in_chans': 45,
+        'bundles': bundles})
 
     # Load it from the checkpoint
     try:
@@ -42,4 +42,4 @@ def get_model(checkpoint_file, kwargs={}):
     # Put the model in eval mode to fix dropout and other stuff
     model.eval()
 
-    return model
+    return model, bundles

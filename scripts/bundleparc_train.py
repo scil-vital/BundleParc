@@ -90,13 +90,6 @@ def train(args, root_dir):
     if args.test and not args.checkpoint:
         raise ValueError('No point in testing if the model is not trained.')
 
-    dm = BundleParcDataModule(
-        args.data,
-        args.config,
-        bundles=args.bundles,
-        batch_size=args.batch_size, num_workers=args.num_workers,
-        pretrain=args.pretrain)
-
     # Training
     comet_logger = CometLogger(
         project_name=args.path,
@@ -133,8 +126,9 @@ def train(args, root_dir):
         precision='bf16-mixed',
         callbacks=[lr_monitor, early_stop_callback])
 
+    bundles = args.bundles
     if args.checkpoint:
-        model = get_model(args.checkpoint, {'pretrained': True})
+        model, bundles = get_model(args.checkpoint, {'pretrained': True})
         model.train()
     else:
         model = BundleParc(
@@ -146,6 +140,13 @@ def train(args, root_dir):
             betas=(args.beta1, args.beta2),
             weight_decay=args.weight_decay,
             warmup_t=args.warmup_t)
+
+    dm = BundleParcDataModule(
+        args.data,
+        args.config,
+        bundles=bundles,
+        batch_size=args.batch_size, num_workers=args.num_workers,
+        pretrain=args.pretrain)
 
     if not args.test:
 

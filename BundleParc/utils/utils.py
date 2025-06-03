@@ -1,5 +1,9 @@
 import numpy as np
+import os
+import requests
 import torch
+
+DEFAULT_CKPT = os.path.join('checkpoints', 'bundleparc.ckpt')
 
 
 def to_numpy(tensor: torch.Tensor, dtype=np.float32) -> np.ndarray:
@@ -56,3 +60,13 @@ def get_device():
         return torch.device("mps")
     else:
         return torch.device("cpu")
+
+
+def download_weights(path=DEFAULT_CKPT):
+    url = 'https://zenodo.org/records/15579498/files/123_4_5_bundleparc.ckpt'
+    os.makedirs(os.path.dirname(path))
+    print('Downloading weights ...')
+    with requests.get(url, stream=True) as r:
+        with open(path, 'wb') as f:
+            f.write(r.content)
+    print('Done !')

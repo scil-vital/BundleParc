@@ -6,7 +6,7 @@ BundleParc: automatic tract labelling without tractography.
 This method takes as input fODF maps and outputs 71 bundle label maps. These maps can then be used to perform tractometry/tract profiling/radiomics. The bundle definitions follow TractSeg's minus the whole CC.
 
 Example usage:
-    $ scil_fodf_bundleparc.py fodf.nii.gz --out_prefix sub-001__
+    $ bundleparc_predict fodf.nii.gz --out_prefix sub-001__
 
 Example output:
     sub-001__AF_left.nii.gz, sub-001__AF_right.nii.gz, ..., sub-001__UF_right.nii.gz
@@ -32,7 +32,6 @@ import logging
 import nibabel as nib
 import numpy as np
 import os
-import requests
 
 from argparse import RawTextHelpFormatter
 from pathlib import Path
@@ -45,11 +44,10 @@ from scilpy.image.volume_operations import resample_volume
 
 from BundleParc.models.utils import get_model
 from BundleParc.predict import predict
+from BundleParc.utils.utils import download_weights, DEFAULT_CKPT
 
 # TODO: Get bundle list from model
 DEFAULT_BUNDLES = ['AF_left', 'AF_right', 'ATR_left', 'ATR_right', 'CA', 'CC_1', 'CC_2', 'CC_3', 'CC_4', 'CC_5', 'CC_6', 'CC_7', 'CG_left', 'CG_right', 'CST_left', 'CST_right', 'FPT_left', 'FPT_right', 'FX_left', 'FX_right', 'ICP_left', 'ICP_right', 'IFO_left', 'IFO_right', 'ILF_left', 'ILF_right', 'MCP', 'MLF_left', 'MLF_right', 'OR_left', 'OR_right', 'POPT_left', 'POPT_right', 'SCP_left', 'SCP_right', 'SLF_III_left', 'SLF_III_right', 'SLF_II_left', 'SLF_II_right', 'SLF_I_left', 'SLF_I_right', 'STR_left', 'STR_right', 'ST_FO_left', 'ST_FO_right', 'ST_OCC_left', 'ST_OCC_right', 'ST_PAR_left', 'ST_PAR_right', 'ST_POSTC_left', 'ST_POSTC_right', 'ST_PREC_left', 'ST_PREC_right', 'ST_PREF_left', 'ST_PREF_right', 'ST_PREM_left', 'ST_PREM_right', 'T_OCC_left', 'T_OCC_right', 'T_PAR_left', 'T_PAR_right', 'T_POSTC_left', 'T_POSTC_right', 'T_PREC_left', 'T_PREC_right', 'T_PREF_left', 'T_PREF_right', 'T_PREM_left', 'T_PREM_right', 'UF_left', 'UF_right']  # noqa E501
-
-DEFAULT_CKPT = os.path.join('checkpoints', 'bundleparc.ckpt')
 
 
 def _build_arg_parser():
@@ -67,6 +65,12 @@ def _build_arg_parser():
     parser.add_argument('--nb_pts', type=int, default=50,
                         help='Number of divisions per bundle. '
                              'Default is [%(default)s].')
+    parser.add_argument('--min_blob_size', type=int, default=50,
+                        help='Minimum blob size (in voxels) to keep. Smaller '
+                             'blobs will be removed. Default is '
+                             '[%(default)s].')
+    parser.add_argument('--keep_biggest_blob', action='store_true',
+                        help='If set, only keep the biggest blob predicted.')
     parser.add_argument('--half_precision', action='store_true',
                         help='Use half precision (float16) for inference. '
                              'This reduces memory usage but may lead to '
@@ -83,36 +87,26 @@ def _build_arg_parser():
     return parser
 
 
-def _download_weights(path=DEFAULT_CKPT):
-    url = 'https://zenodo.org/records/15579498/files/123_4_5_bundleparc.ckpt'
-    os.makedirs(os.path.dirname(path))
-    print('Downloading weights ...')
-    with requests.get(url, stream=True) as r:
-        with open(path, 'wb') as f:
-            f.write(r.content)
-    print('Done !')
-
-
 def main():
 
     parser = _build_arg_parser()
     args = parser.parse_args()
 
-    assert_inputs_exist(parser, [args.in_fodf, args.in_wm])
+    assert_inputs_exist(parser, [args.in_fodf])
     assert_outputs_exist(parser, args, args.out_prefix)
-    assert_output_dirs_exist_and_empty(parser, args.out_folder,
+    assert_output_dirs_exist_and_empty(parser, args, args.out_folder,
                                        create_dir=True)
 
     logging.getLogger().setLevel(logging.getLevelName(args.verbose))
 
     # if file not exists
     if not os.path.exists(args.checkpoint):
-        _download_weights(args.checkpoint)
+        download_weights(args.checkpoint)
 
     # Load the model
-    model = get_model(args.checkpoint, {'pretrained': True})
+    model, bundles = get_model(args.checkpoint, {'pretrained': True})
 
-    fodf_in = nib.load(args.fodf)
+    fodf_in = nib.load(args.in_fodf)
     X, Y, Z, C = fodf_in.get_fdata().shape
 
     # TODO in future release: infer these from model
@@ -137,9 +131,9 @@ def main():
     # Predict label maps. `predict` is a generator
     # yielding one label map per bundle and its name.
     for y_hat_label, b_name in predict(
-        model, resampled_img, n_coefs, args.nb_pts, args.bundles,
+        model, resampled_img, n_coefs, args.nb_pts, bundles,
         args.min_blob_size, args.keep_biggest_blob, args.half_precision,
-        logging.getLevelName(args.verbose) == 'DEBUG'
+        logging.getLogger().getEffectiveLevel() == logging.INFO
     ):
 
         Path(os.path.join(args.out_folder, b_name)).mkdir(exist_ok=True)

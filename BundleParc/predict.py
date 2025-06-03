@@ -24,17 +24,16 @@ def post_process_mask(
     bundle_name : str
         Name of the bundle.
     """
+    bundle_mask = (mask > 0.5)
 
     # Get the blobs in the image. Ideally, a mask only has one blob.
     # More than one either indicates a broken segmentation, or extraneous
-    # voxels. TODO: handle these cases differently.
-    bundle_mask = (mask > 0.5)
-
-    # TODO: investigate blobs
+    # voxels.
     blobs, nb = label(bundle_mask)
 
     # No need to process, return the mask
     if nb <= 1:
+        logging.debug(f"Only one blob in {bundle_name}.")
         return bundle_mask.astype(np.uint8)
 
     # Calculate the size of each blob
@@ -47,11 +46,13 @@ def post_process_mask(
         new_mask[blobs == biggest_blob + 1] = 1
         return new_mask
 
-    # Remove blobs under a certain size (100)
+    # Remove blobs under a certain size (min_blob_size)
+    new_nb_blobs = 0
     for i in range(1, len(blob_sizes[1:])):
         if blob_sizes[i] >= min_blob_size:
             new_mask[blobs == i] = 1
-
+            new_nb_blobs += 1
+    logging.warning(f'Kept {new_nb_blobs} blob out of {nb} in {bundle_name}.')
     return bundle_mask.astype(np.uint8)
 
 
