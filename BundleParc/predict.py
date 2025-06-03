@@ -62,10 +62,6 @@ def post_process_labels(
     """ Masked filtering (normalized convolution) and label discretizing.
     Reference:
     https://stackoverflow.com/questions/59685140/python-perform-blur-only-within-a-mask-of-image  # noqa
-    """
-    """ Masked filtering (normalized convolution) and label discretizing.
-    Reference:
-    https://stackoverflow.com/questions/59685140/python-perform-blur-only-within-a-mask-of-image  # noqa
 
     Parameters
     ----------
@@ -142,20 +138,15 @@ def predict(
     device = get_device()
     fodf_data = get_data(fodf, n_coefs)
 
-    # z-score norm
-    mean = np.mean(fodf_data)
-    std = np.std(fodf_data)
-    fodf_data = (fodf_data - mean) / std
-
     pbar = tqdm(range(nb_bundles), disable=not verbose)
 
-    with torch.amp.autocast(str(device), enabled=half_precision):
+    with torch.amp.autocast(device.type, enabled=half_precision):
 
         # Convert the fODF data to a torch tensor
         data = torch.tensor(
             fodf_data,
             dtype=torch.float
-        ).to('cuda:0')
+        ).to(device)
 
         # Create a one-hot encoding of the bundle prompts.
         prompts = torch.eye(len(bundles), device=device)
