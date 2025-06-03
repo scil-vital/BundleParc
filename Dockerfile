@@ -4,15 +4,17 @@ WORKDIR /
 
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get install -y git build-essential \
-      liblapack-dev libopenblas-dev libgl1 libxrender1
+    apt-get install -y git build-essential gcc g++ pkg-config \
+      liblapack-dev libopenblas-dev libgl1 libxrender1 \
+      libfreetype6-dev pkg-config
 
-RUN git git@github.com:scil-vital/BundleParc.git
+RUN git clone https://github.com/scil-vital/BundleParc.git
 
 WORKDIR /BundleParc
 
 RUN mkdir checkpoints
 ADD https://zenodo.org/records/15579498/files/123_4_5_bundleparc.ckpt checkpoints/123_4_5_bundleparc.ckpt
 
+RUN pip3 install --upgrade pip
 RUN pip install Cython numpy packaging
 RUN pip install -e .
