@@ -13,22 +13,23 @@ from monai.metrics.meandice import DiceMetric
 from monai.metrics.meaniou import MeanIoU
 from timm.scheduler.cosine_lr import CosineLRScheduler
 
-from LabelSeg.models.labelsegnet import LabelSegNet
+from BundleParc.models.bundleparcnet import BundleParcNet
 
 
-class LabelSeg(LightningModule):
+class BundleParc(LightningModule):
 
     def __init__(
         self,
-        prompt_strategy: str,
+        in_chans: int,
         volume_size: int = 128,
+        channels=[32, 64, 128, 256, 512],
         bundles: list = [],
         lr: float = 1e-4,
         betas: tuple = (0.9, 0.999),
         weight_decay: float = 0.1,
         warmup_t: int = 5,
         epochs: int = 1000,
-        ds: bool = False,
+        pretrained=False,
         model=None,
     ) -> None:
         """
@@ -37,11 +38,10 @@ class LabelSeg(LightningModule):
         Parameters:
         -----------
         """
-        super(LabelSeg, self).__init__()
+        super(BundleParc, self).__init__()
         # Keep the name of the model
         self.hparams["name"] = self.__class__.__name__
-        self.pretrained = False
-        self.prompt_strategy = prompt_strategy
+        self.pretrained = pretrained
         self.volume_size = volume_size
         self.bundles = bundles
 
@@ -50,13 +50,10 @@ class LabelSeg(LightningModule):
         self.weight_decay = weight_decay
         self.warmup_t = warmup_t
         self.epochs = epochs
-        self.ds = ds
 
-        self.in_chans = 28
+        self.in_chans = in_chans
         self.volume_size = volume_size
-        self.prompt_strategy = 'attention'
-        self.embed_dim = 32
-        self.bottleneck_dim = 512
+        self.channels = channels
         self.n_bundles = len(self.bundles)
 
         self.ce = BCELoss(reduction='none')
@@ -68,20 +65,21 @@ class LabelSeg(LightningModule):
             ignore_empty=False, num_classes=2)
         self.iou_metric = MeanIoU(ignore_empty=False)
 
-        self.labelsegnet = model
-        if model is None:
-            self.labelsegnet = LabelSegNet(
-                self.in_chans, self.volume_size, self.prompt_strategy,
-                self.embed_dim, self.bottleneck_dim, n_bundles=self.n_bundles)
+        self.bundleparcnet = model
+        if self.bundleparcnet is None:
+            self.bundleparcnet = BundleParcNet(
+                self.in_chans, volume_size=self.volume_size,
+                channels=self.channels, n_bundles=self.n_bundles)
 
         if not self.pretrained:
             self.save_hyperparameters()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.labelsegnet.parameters(),
+        optimizer = torch.optim.AdamW(self.bundleparcnet.parameters(),
                                       lr=self.lr,
                                       weight_decay=self.weight_decay,
                                       betas=(0.9, 0.999))
+
         scheduler = CosineLRScheduler(optimizer, t_initial=5, lr_min=1e-7,
                                       cycle_limit=self.epochs,
                                       warmup_t=self.warmup_t,
@@ -94,6 +92,13 @@ class LabelSeg(LightningModule):
                 "interval": "epoch",
             },
         }
+
+    # def on_after_backward(self) -> None:
+    #     print("on_after_backward enter")
+    #     for n, p in self.bundleparcnet.named_parameters():
+    #         if p.requires_grad and p.grad is None:
+    #             print(n)
+    #     print("on_after_backward exit")
 
     def lr_scheduler_step(self, scheduler, metric):
         scheduler.step(epoch=self.current_epoch)
@@ -148,7 +153,7 @@ class LabelSeg(LightningModule):
             # no truthy voxels. These cause NaNs which have to be removed.
             # Note sure if there is a better way.
             ce = self.ce(y_hat_ce, y_ce)
-            loss_ce = ce.nanmean()
+            loss_ce = torch.nan_to_num(ce.nanmean())
             assert not torch.isnan(loss_ce)
 
         # Mask prediction
@@ -158,33 +163,13 @@ class LabelSeg(LightningModule):
         loss_dice = dice.mean()
         return loss_ce, loss_dice
 
-    def mask_loss(self, y_pred, y_true, ds):
+    def mask_loss(self, y_pred, y_true):
         # First loss at full scale
-        ce, dice = self.loss(y_pred[-1], y_true)
+        ce, dice = self.loss(y_pred, y_true)
 
-        if not ds:
-            return ce, dice
-
-        # Size of "F"ull res
-        _, _, FH, FD, FW = y_true.size()
-        # Compute loss at every scale by interpolating the target
-        for y_hat in y_pred[-2::-1]:
-            # Size of smaller scale
-            _, _, H, D, W = y_hat.size()
-            # Factor to scale the loss
-            # TODO: Scale loss by factor cubed or squared instead of linearly ?
-            # To account for the number of voxels ?
-            factor = H / FH
-            # Interpolate target to the size of the current scale
-            y = F.interpolate(y_true, (H, W, D), mode='nearest')
-            # Compute loss and add it to the total loss
-            l_ce, l_dice = self.loss(y_hat, y)
-            ce += factor * l_ce
-            dice += factor * l_dice
-        # Return the total loss
         return ce, dice
 
-    def forward(self, x, p, m) -> List[torch.Tensor]:
+    def forward(self, x, p) -> List[torch.Tensor]:
         """
         Predict labels and masks from an image and prompts.
 
@@ -202,16 +187,16 @@ class LabelSeg(LightningModule):
         y: List[torch.Tensor]
             The predicted labels and masks at different scales
         """
-        y = self.labelsegnet(x, p, m)
+        y = self.bundleparcnet(x, p)
 
         return y
 
     def training_step(self, train_batch, batch_idx):
         """ Compute the loss for the model and log it. """
-        x_i, x_p, w_m, y = train_batch
+        x_i, x_p, y = train_batch
 
-        y_hat = self.forward(x_i, x_p, w_m)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y, self.ds)
+        y_hat = self.forward(x_i, x_p)
+        loss_ce, loss_dice = self.mask_loss(y_hat, y)
 
         loss = loss_ce + loss_dice
 
@@ -225,13 +210,13 @@ class LabelSeg(LightningModule):
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        x_i, x_p, w_m, y = val_batch
+        x_i, x_p, y = val_batch
 
-        y_hat = self.forward(x_i, x_p, w_m)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y, self.ds)
+        y_hat = self.forward(x_i, x_p)
+        loss_ce, loss_dice = self.mask_loss(y_hat, y)
         loss = loss_ce + loss_dice
 
-        preds = (F.sigmoid(y_hat[-1][:, [0]]) > 0.5).int()
+        preds = (F.sigmoid(y_hat[:, [0]]) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()
@@ -249,13 +234,13 @@ class LabelSeg(LightningModule):
                  sync_dist=True)
 
     def test_step(self, test_batch, batch_idx):
-        x_i, x_p, w_m, y = test_batch
+        x_i, x_p, y = test_batch
 
-        y_hat = self.forward(x_i, x_p, w_m)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y, self.ds)
+        y_hat = self.forward(x_i, x_p)
+        loss_ce, loss_dice = self.mask_loss(y_hat, y)
         loss = loss_ce + loss_dice
 
-        preds = (F.sigmoid(y_hat[-1][:, [0]]) > 0.5).int()
+        preds = (F.sigmoid(y_hat[:, [0]]) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()

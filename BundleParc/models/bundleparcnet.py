@@ -5,7 +5,7 @@ from typing import Tuple, Type
 from torch import nn, Tensor
 from torch.nn import functional as F
 
-from LabelSeg.models.encodings import PositionalEncodingPermute3D
+from BundleParc.models.encodings import PositionalEncodingPermute3D
 
 # TODO: Cite MedSAM3D
 
@@ -51,11 +51,12 @@ class Attention(nn.Module):
     def _separate_heads(self, x: Tensor, num_heads: int) -> Tensor:
         b, n, c = x.shape
         x = x.reshape(b, n, num_heads, c // num_heads)
-        return x.transpose(1, 2)  # B x N_heads x N_tokens x C_per_head
+        # B x N_heads x N_tokens x C_per_head
+        return x.transpose(1, 2).contiguous()
 
     def _recombine_heads(self, x: Tensor) -> Tensor:
         b, n_heads, n_tokens, c_per_head = x.shape
-        x = x.transpose(1, 2)
+        x = x.transpose(1, 2).contiguous()
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
     def forward(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
@@ -126,27 +127,26 @@ class TwoWayAttentionBlock3D(nn.Module):
     def forward(
         self, queries: Tensor, keys: Tensor, query_pe: Tensor
     ) -> Tuple[Tensor, Tensor]:
-        # Cross attention block, tokens attending to image embedding
+
         q = queries + query_pe
         k = keys
 
-        attn_out = self.cross_attn_token_to_image(
-            q=q, k=k, v=keys)
-        queries = queries + attn_out
-        queries = self.norm2(queries)
+        # Cross attention block, image embedding attending to tokens
+        attn_out = self.cross_attn_image_to_token(
+            q=k, k=q, v=queries)
+        keys = keys + attn_out
+        keys = self.norm4(keys)
 
         # MLP block
         mlp_out = self.mlp(queries)
         queries = queries + mlp_out
         queries = self.norm3(queries)
 
-        # Cross attention block, image embedding attending to tokens
-        q = queries + query_pe
-        k = keys
-        attn_out = self.cross_attn_image_to_token(
-            q=k, k=q, v=queries)
-        keys = keys + attn_out
-        keys = self.norm4(keys)
+        # Cross attention block, tokens attending to image embedding
+        attn_out = self.cross_attn_token_to_image(
+            q=q, k=k, v=keys)
+        queries = queries + attn_out
+        queries = self.norm2(queries)
 
         return queries, keys
 
@@ -307,12 +307,9 @@ class DecoderNextLayer(nn.Module):
     """
 
     def __init__(
-        self, in_chans: int, out_chans: int, ratio: int = 1,
-        prompt_strategy='add'
+        self, in_chans: int, out_chans: int, ratio: int = 1
     ):
         super().__init__()
-
-        self.prompt_strategy = prompt_strategy
 
         self.upsample = UpsampleNextBlock(
             in_chans, out_chans, ratio)
@@ -323,16 +320,9 @@ class DecoderNextLayer(nn.Module):
         self.prompt_encoding = nn.Sequential(
             nn.Linear(in_chans, out_chans), nn.GELU())
 
-        if self.prompt_strategy == 'attention':
-            self.tkn2img = TwoWayAttentionBlock3D(
-                out_chans, 4, mlp_dim=out_chans * ratio)
-            self.pe_layer = PositionalEncodingPermute3D(out_chans)
-            self._prompt_func = self._prompt_attn
-        else:
-            self.prompt_conv = ConvNextBlock(out_chans, ratio)
-            self._prompt_func = self._prompt_add
-
-        self.ds_head = Head(out_chans)
+        self.tkn2img = TwoWayAttentionBlock3D(
+            out_chans, 4, mlp_dim=out_chans * ratio)
+        self.pe_layer = PositionalEncodingPermute3D(out_chans)
 
     def _decode(self, z, encoder_feature):
         """ TODO """
@@ -341,74 +331,58 @@ class DecoderNextLayer(nn.Module):
         z = self.conv1(z)
         return z
 
-    def _prompt_add(self, z, prompt_encoding, dense_encoding):
-
-        z += dense_encoding
-        z = self.prompt_conv(z)
-        z += prompt_encoding[..., None, None, None]
-
-        return z, prompt_encoding
-
-    def _prompt_attn(self, z, prompt_encoding, dense_encoding):
+    def _prompt_attn(self, z, prompt_encoding):
         """ TODO """
         B, C, X, Y, Z = z.shape
         prompt_encoding = prompt_encoding[:, None, :]
         pe = self.pe_layer(z)
 
-        image_embedding = (z + dense_encoding).flatten(2).permute(0, 2, 1)
-        pe = pe.flatten(2).permute(0, 2, 1)
+        image_embedding = (z).flatten(2).permute(0, 2, 1).contiguous()
+        pe = pe.flatten(2).permute(0, 2, 1).contiguous()
 
         z, prompt_encoding = self.tkn2img(
             image_embedding, prompt_encoding, pe)
 
-        z = z.permute(0, 2, 1).reshape((B, C, X, Y, Z))
+        z = z.permute(0, 2, 1).reshape((B, C, X, Y, Z)).contiguous()
         prompt_encoding = prompt_encoding[:, 0, :]
 
         return z, prompt_encoding
 
-    def forward(self, z, encoder_feature, prompt_encoding, dense_encoding):
+    def forward(self, z, encoder_feature, prompt_encoding):
         """ TODO """
         z = self._decode(z, encoder_feature)
         prompt_encoding = self.prompt_encoding(prompt_encoding)
-        z, prompt_encoding = self._prompt_func(
-            z, prompt_encoding, dense_encoding)
+        z, prompt_encoding = self._prompt_attn(
+            z, prompt_encoding)
         z = self.conv2(z)  # maybe ?
-        ds_out = self.ds_head(z)
-        return z, prompt_encoding, ds_out
+        return z, prompt_encoding
 
 
-class LabelSegNetDecoder(nn.Module):
+class BundleParcNetDecoder(nn.Module):
     """ MedNeXt decoder with 4 decoder layers. """
 
     def __init__(
-        self, prompt_strategy='add', channels=[512, 256, 128, 64, 32]
+        self, channels=[512, 256, 128, 64, 32]
     ):
         super().__init__()
 
         self.layers = nn.ModuleList([
-            DecoderNextLayer(channels[0], channels[1], ratio=4,
-                             prompt_strategy=prompt_strategy),
-            DecoderNextLayer(channels[1], channels[2], ratio=4,
-                             prompt_strategy=prompt_strategy),
-            DecoderNextLayer(channels[2], channels[3], ratio=3,
-                             prompt_strategy=prompt_strategy),
-            DecoderNextLayer(channels[3], channels[4], ratio=2,
-                             prompt_strategy=prompt_strategy),
+            DecoderNextLayer(channels[0], channels[1], ratio=4),
+            DecoderNextLayer(channels[1], channels[2], ratio=4),
+            DecoderNextLayer(channels[2], channels[3], ratio=3),
+            DecoderNextLayer(channels[3], channels[4], ratio=2)
         ])
 
-    def forward(self, x, embeddings, prompt_encoding, dense_encoding):
+    def forward(self, x, embeddings, prompt_encoding):
 
-        ds_outs = []
-
-        for decoder_layer, encoder_feature, dense_feature in zip(
-            self.layers, embeddings, dense_encoding
+        for decoder_layer, encoder_feature in zip(
+            self.layers, embeddings
         ):
-            x, prompt_encoding, ds_out = \
+            x, prompt_encoding = \
                 decoder_layer(
-                    x, encoder_feature, prompt_encoding, dense_feature)
-            ds_outs.append(ds_out)
+                    x, encoder_feature, prompt_encoding)
 
-        return x, ds_outs
+        return x
 
 
 class Stem(nn.Module):
@@ -418,17 +392,16 @@ class Stem(nn.Module):
     def __init__(self, in_chans: int, out_chans: int):
         super().__init__()
 
-        self.conv2 = nn.Conv3d(
+        self.conv = nn.Conv3d(
             in_chans, out_chans, kernel_size=1, stride=1)
 
-        # Use Xavier initialisation for weights
-        for m in self.modules():
-            if isinstance(m, nn.Conv3d) or isinstance(m, nn.ConvTranspose3d):
-                nn.init.xavier_uniform_(m.weight)
+        # # Use Xavier initialisation for weights
+        # for m in self.modules():
+        #     if isinstance(m, nn.Conv3d) or isinstance(m, nn.ConvTranspose3d):
+        #         nn.init.xavier_uniform_(m.weight)
 
-    def forward(self, x):
-        x = self.conv2(x)
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(x)
 
 
 class Head(nn.Module):
@@ -451,116 +424,60 @@ class Head(nn.Module):
         return x
 
 
-class LabelSegNet(nn.Module):
+class BundleParcNet(nn.Module):
 
-    def __init__(self, in_chans, volume_size=96,
-                 prompt_strategy='add',
-                 embed_dim=32, bottleneck_dim=512, n_bundles=71):
+    def __init__(self, in_chans, volume_size=128,
+                 channels=[32, 64, 128, 256, 512], n_bundles=71):
         super().__init__()
 
-        self.channels = [32, 64, 128, 256, 512]
+        self.channels = channels
+        # self.channels = [32, 64, 128, 256, 512]
 
-        self.prompt_strategy = prompt_strategy
+        # Important to store this for loading the model later.
+        self.in_chans = in_chans
         self.volume_size = volume_size
+        self.embed_dim = self.channels[0]
+        self.bottleneck_dim = self.channels[-1]
+        self.n_bundles = n_bundles
+
+        # Define the input branch
+        self.stem = nn.Conv3d(
+            in_chans, self.embed_dim, kernel_size=1, stride=1)
+
+        # Define the output head
+        self.head = Head(self.channels[0])
 
         # Define the model
-        self.stem = Stem(in_chans, embed_dim)
-        self.mask_stem = Stem(1, embed_dim)
-
         self.encoder = UNextEncoder(self.channels)
-        self.mask_encoder = UNextEncoder(self.channels)
-
-        self.bottleneck = ConvNextBlock(bottleneck_dim, ratio=4)
-        self.decoder = LabelSegNetDecoder(prompt_strategy,
-                                          channels=self.channels[::-1])
-        # self.head = Head(embed_dim)
+        self.bottleneck = ConvNextBlock(self.bottleneck_dim, ratio=4)
+        self.decoder = BundleParcNetDecoder(channels=self.channels[::-1])
 
         self.prompt_embedding = nn.Sequential(
-            nn.Linear(n_bundles, bottleneck_dim), nn.GELU())
+            nn.Linear(n_bundles, self.bottleneck_dim), nn.GELU())
 
-        self.no_mask_embed = nn.Embedding(1, embed_dim)
-
-    def forward(self, fodf, bundle_prompt, wm_prompt=None):
+    def forward(self, fodf, bundle_prompt):
         """ Forward pass of the model. """
 
-        B, C, X, Y, Z = fodf.shape
+        # B, C, X, Y, Z = fodf.shape
 
-        # Embed the input fodf
-        input_embedding = self.stem(fodf)
+        z, encoder_features = self.encode(fodf)
+        y_hat = self.decode(z, encoder_features, bundle_prompt)
 
-        # Embed the bundle prompt to the same dimension as the input fodf
-        prompt_embed = self.prompt_embedding(bundle_prompt)
+        return y_hat
 
-        # Embded the "dense" mask if it is provided
-        # Else, use the learned embedding
-        # TODO: Is it actually necessary to support the no mask case?
-        if torch.sum(wm_prompt) == 0:
-            dense_embeddings = self.no_mask_embed.weight.reshape(
-                1, -1, 1, 1, 1).expand(
-                    B, -1, X, Y, Z)
-        else:
-            dense_embeddings = self.mask_stem(wm_prompt)
-
-        # Run the encoders for the input fodf and the mask
-        # TODO: Consider using a single encoder for both ?
-        encoder_features = []
-        mask_features = []
-        x = input_embedding
-        for encoder_layer in self.encoder.layers:
-            x, x_res = encoder_layer(x)
-            encoder_features.append(x_res)
-
-        m = dense_embeddings
-        for mask_encoder_layers in self.mask_encoder.layers:
-            m, m_res = mask_encoder_layers(m)
-            mask_features.append(m_res)
-
-        # As opposed to the original MedNeXt, we do not use deep
-        # supervision here, as the bottleneck does not receive any
-        # prompt information and therefore cannot know which
-        # bundle to predict
-        z = self.bottleneck(x)
-
-        # Run the decoder
-        # Decoder layers are run in reverse order to match the
-        # encoder features. Deep supervision heads produce smaller
-        # versions of the final output
-        z, ds_outs = self.decoder(
-            z, encoder_features[::-1], prompt_embed, mask_features[::-1])
-
-        return ds_outs
-
-    def encode(self, fodf, wm_prompt=None):
+    def encode(self, fodf):
         """ Forward pass of the model's encoder. """
-        B, C, X, Y, Z = fodf.shape
+        # B, C, X, Y, Z = fodf.shape
 
         # Embed the input fodf
-        input_embedding = self.stem(fodf)
+        x = self.stem(fodf)
 
-        # Embded the "dense" mask if it is provided
-        # Else, use the learned embedding
-        # TODO: Is it actually necessary to support the no mask case?
-        if torch.sum(wm_prompt) == 0:
-            dense_embeddings = self.no_mask_embed.weight.reshape(
-                1, -1, 1, 1, 1).expand(
-                    B, -1, X, Y, Z)
-        else:
-            dense_embeddings = self.mask_stem(wm_prompt)
-
-        # Run the encoders for the input fodf and the mask
+        # Run the encoders for the input fodf
         # TODO: Consider using a single encoder for both ?
         encoder_features = []
-        mask_features = []
-
-        x = input_embedding
         for encoder_layer in self.encoder.layers:
             x, x_res = encoder_layer(x)
-            encoder_features.append(x_res)
-
-        m = dense_embeddings
-        for mask_encoder_layers in self.mask_encoder.layers:
-            m, m_res = mask_encoder_layers(m)
-            mask_features.append(m_res)
+            encoder_features.insert(0, x_res)
 
         # As opposed to the original MedNeXt, we do not use deep
         # supervision here, as the bottleneck does not receive any
@@ -568,18 +485,19 @@ class LabelSegNet(nn.Module):
         # bundle to predict
         z = self.bottleneck(x)
 
-        return z, encoder_features, mask_features
+        return z, encoder_features
 
-    def decode(self, z, encoder_features, mask_features, bundle_prompt):
+    def decode(self, z, encoder_features, bundle_prompt):
         """ Forward pass of the model's decoder. """
         # Embed the bundle prompt to the same dimension as the input fodf
         prompt_embed = self.prompt_embedding(bundle_prompt)
 
         # Run the decoder
         # Decoder layers are run in reverse order to match the
-        # encoder features. Deep supervision heads produce smaller
-        # versions of the final output
-        z, ds_outs = self.decoder(
-            z, encoder_features[::-1], prompt_embed, mask_features[::-1])
+        # encoder features.
+        z = self.decoder(
+            z, encoder_features, prompt_embed)
 
-        return ds_outs
+        y_hat = self.head(z)
+
+        return y_hat
