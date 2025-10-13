@@ -12,9 +12,10 @@ For actually running BundleParc, please the section below.
 
 __BundleParc is available in [scilpy](https://github.com/scilus/scilpy) !__
 
-See `scil_fodf_bundleparc.py -h` or the [scilpy documentation](https://scilpy.readthedocs.io/en/latest/scripts/scil_fodf_bundleparc.html) for more information.
+See `scil_fodf_bundleparc.py -h` or the [scilpy documentation](https://scilpy.readthedocs.io/en/latest/scripts/scil_fodf_bundleparc.html) for more information. BundleParc is also available through scilpy's Docker image [scilus/scilpy:2.2.0_gpu](https://hub.docker.com/r/scilus/scilpy).
 
-BundleParc is also available through scilpy's Docker image [scilus/scilpy:2.2.0_gpu](https://hub.docker.com/r/scilus/scilpy).
+__BundleParc-flow can allow you to easily run BundleParc on whole populations.__
+See [BundleParc-flow](https://github.com/scil-vital/BundleParc-flow) for more information.
 
 ## Installation
 
