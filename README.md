@@ -33,6 +33,4 @@ Ran into a problem during installation ? Have a question ? Please open an issue 
 
 ## To cite
 
-```Antoine Théberge, Zineb El Yamani, François Rheault, Maxime Descoteaux, Pierre-Marc Jodoin (2025). LabelSeg. ISMRM Workshop on 40 Years of Diffusion: Past, Present & Future Perspectives, Kyoto, Japan.```
-
-Full paper submitted to Medical Image Analysis.
+Journal paper submitted. Please contact us for acknowledgement.
