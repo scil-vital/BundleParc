@@ -6,10 +6,12 @@ from h5py import File
 from monai.transforms import (
     RandAffineD,
     RandFlipD, Rand3DElasticD, RandZoomD, RandSimulateLowResolutionD,
+    RandGridDistortionD,
     RandGaussianNoise)
 from torch.utils.data import Dataset
 
-from BundleParc.dataset.transforms import RandDownSampleFODFOrderD
+from BundleParc.dataset.transforms import (
+    RandDownSampleFODFOrderD, RandSHBasisD)
 
 # from scilpy.tractanalysis.streamlines_metrics import compute_tract_counts_map
 
@@ -49,16 +51,24 @@ class BundleParcDataset(Dataset):
         # TODO: Actually use this transform right now it eats up all the memory
         self.elastic = Rand3DElasticD(
             keys=["image", "label", "mask"],
+            mode=['bilinear', 'nearest', 'nearest'],
             sigma_range=[90, 120],
             magnitude_range=[9, 11],
-            prob=0.2)
+            prob=1)
+
+        self.grid = RandGridDistortionD(
+            keys=["image", "label", "mask"],
+            mode=['bilinear', 'nearest', 'nearest'],
+            num_cells=5,
+            distort_limit=0.3,
+            prob=1)
 
         # Transform to simulate affine transformations, i.e rotations and
         # translations
         self.affine = RandAffineD(
             keys=["image", "label", "mask"],
             mode=['bilinear', 'nearest', 'nearest'],
-            rotate_range=pi_4,
+            rotate_range=0,
             translate_range=5, prob=0.2)
         # Transform to simulate zooming, i.e making the image bigger or smaller
         self.zoom = RandZoomD(
@@ -78,6 +88,7 @@ class BundleParcDataset(Dataset):
             mean=0, std=0.05, prob=0.2)
 
         self.fod_down = RandDownSampleFODFOrderD(prob=0.2)
+        self.sh_basis = RandSHBasisD(prob=1)
 
         self.bundle_ids, self.train_idx, self.val_idx, self.test_idx \
             = self._compute_length(self.config_file)
@@ -135,7 +146,7 @@ class BundleParcDataset(Dataset):
         img = self[0]
         return img
 
-    @ property
+    @property
     def f(self):
         """ Open the hdf5 file
         """
@@ -183,6 +194,7 @@ class BundleParcDataset(Dataset):
         if not self.is_test:
             data_dict = self.flip(data_dict)
             # data_dict = self.elastic(data_dict)
+            data_dict = self.grid(data_dict)
             data_dict = self.affine(data_dict)
             data_dict = self.zoom(data_dict)
             data_dict = self.resize(data_dict)
@@ -197,6 +209,7 @@ class BundleParcDataset(Dataset):
         if not self.is_test:
             fodf_data = self.gaussian(fodf_data)
             fodf_data = self.fod_down(fodf_data)
+            fodf_data = self.sh_basis(fodf_data)
 
         return fodf_data, prompt_data, bundle_labels
 
