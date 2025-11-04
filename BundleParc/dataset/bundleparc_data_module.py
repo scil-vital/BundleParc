@@ -50,8 +50,8 @@ class BundleParcDataModule(pl.LightningDataModule):
             'batch_size': self.batch_size,
             'num_workers': self.num_workers,
             'prefetch_factor': None,
-            'persistent_workers': False,
-            'pin_memory': False
+            'persistent_workers': True,
+            'pin_memory': True
         }
 
     def prepare_data(self):

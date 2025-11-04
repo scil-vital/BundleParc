@@ -51,7 +51,6 @@ class RandSHBasisD(RandomizableTransform):
 
         super().randomize(None)
         self._basis = self.R.choice(['tournier07', 'descoteaux07'])
-        self.sphere = get_sphere(name='repulsion724').subdivide(n=1)
 
     def __call__(self, img):
         """ Change the SH basis of the FODF coefficients.
@@ -71,8 +70,10 @@ class RandSHBasisD(RandomizableTransform):
         if self._do_transform:
             # Swap from C,H,W,D H,W,D,C
             new_img = img.transpose(1, 2, 3, 0)
-            new_img = convert_sh_descoteaux_tournier(new_img)
-            new_img = convert_sh_from_legacy(new_img, self._basis)
+            if self._basis == 'tournier07':
+                new_img = convert_sh_descoteaux_tournier(new_img)
+            else:
+                new_img = convert_sh_from_legacy(new_img, self._basis)
             new_img = new_img.transpose(3, 0, 1, 2)
             return np.ascontiguousarray(new_img.astype(np.float32))
         return img

@@ -33,7 +33,6 @@ def create_dataset(
     # Open the output file
     with h5py.File(output_file, 'w') as f:
         # Loop over the directories in the input directory
-        f.create_group
         progress = tqdm(subs)
         for subject in progress:
 
@@ -67,7 +66,7 @@ def create_dataset(
 
             # Create a dataset for the FODF volume
             group.create_dataset('fodf', data=fodf_data[:nb_coeffs, ...],
-                                 compression="gzip", dtype=out_dtype)
+                                 compression='lzf', dtype=out_dtype)
 
             # Create a dataset for the affine transformation matrix
             group.create_dataset('affine', data=affine)
@@ -101,7 +100,7 @@ def create_dataset(
 
                 bundle.create_dataset(
                     'labels', data=resampled_b_label.get_fdata(),
-                    compression="gzip", dtype=out_dtype)
+                    compression='lzf', dtype=out_dtype)
 
 
 def main():
@@ -110,7 +109,7 @@ def main():
     parser.add_argument('subs', nargs='+', type=str,
                         help='Input directory containing FODF volumes')
     parser.add_argument('output_file', help='Output HDF5 file')
-    parser.add_argument('--volume_size', default=128, type=int,
+    parser.add_argument('--volume_size', default=144, type=int,
                         help='Volume size to resample to.')
     parser.add_argument('--sh_order', type=int, default=8,
                         choices=[2, 4, 6, 8],

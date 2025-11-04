@@ -61,7 +61,7 @@ class BundleParcDataset(Dataset):
             mode=['bilinear', 'nearest', 'nearest'],
             num_cells=5,
             distort_limit=0.3,
-            prob=1)
+            prob=0.2)
 
         # Transform to simulate affine transformations, i.e rotations and
         # translations
@@ -88,7 +88,7 @@ class BundleParcDataset(Dataset):
             mean=0, std=0.05, prob=0.2)
 
         self.fod_down = RandDownSampleFODFOrderD(prob=0.2)
-        self.sh_basis = RandSHBasisD(prob=1)
+        self.sh_basis = RandSHBasisD(prob=0.5)
 
         self.bundle_ids, self.train_idx, self.val_idx, self.test_idx \
             = self._compute_length(self.config_file)
@@ -151,7 +151,7 @@ class BundleParcDataset(Dataset):
         """ Open the hdf5 file
         """
         if not hasattr(self, 'archive'):
-            self.archive = File(self.file_path, 'r')
+            self.archive = File(self.file_path, 'r', libver='latest')
         return self.archive
 
     def _get_datum(self, i):
@@ -167,11 +167,10 @@ class BundleParcDataset(Dataset):
 
         # Get the FODF volume
         fodf_data = np.asarray(
-            self.f[s]['fodf']).astype(np.float32)
+            self.f[s]['fodf'])
 
         bundle_labels = np.asarray(
-            self.f[s]['bundles'][f'{b}']['labels'])[None, ...].astype(
-                np.float32)
+            self.f[s]['bundles'][f'{b}']['labels'])[None, ...]
 
         bundle_mask = bundle_labels > 0
         bundle_labels[bundle_mask] += 1
