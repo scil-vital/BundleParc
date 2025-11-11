@@ -43,12 +43,12 @@ class BundleParcDataset(Dataset):
 
         # Transform to simulate left-right flips
         self.flip = RandFlipD(
-            keys=["image", "label", "mask"], prob=0.2, spatial_axis=0)
+            keys=["image", "mask"], prob=0.2, spatial_axis=0)
 
         # Transform to simulate elastic deformations.
         # TODO: Actually use this transform right now it eats up all the memory
         self.elastic = Rand3DElasticD(
-            keys=["image", "label", "mask"],
+            keys=["image", "mask"],
             sigma_range=[90, 120],
             magnitude_range=[9, 11],
             prob=0.2)
@@ -56,18 +56,18 @@ class BundleParcDataset(Dataset):
         # Transform to simulate affine transformations, i.e rotations and
         # translations
         self.affine = RandAffineD(
-            keys=["image", "label", "mask"],
-            mode=['bilinear', 'nearest', 'nearest'],
+            keys=["image", "mask"],
+            mode=['bilinear', 'nearest'],
             rotate_range=pi_4,
             translate_range=5, prob=0.2)
         # Transform to simulate zooming, i.e making the image bigger or smaller
         self.zoom = RandZoomD(
-            keys=["image", "label", "mask"], min_zoom=0.9, max_zoom=1.5,
-            mode=['area', 'nearest-exact', 'nearest-exact'],
+            keys=["image", "mask"], min_zoom=0.9, max_zoom=1.5,
+            mode=['area', 'nearest-exact'],
             prob=0.2)
         # Transform to simulate low resolution by downsampling and upsampling
         self.resize = RandSimulateLowResolutionD(
-            keys=["image", "label", "mask"], zoom_range=(0.5, 1),
+            keys=["image", "mask"], zoom_range=(0.5, 1),
             upsample_mode='nearest',
             downsample_mode='nearest',
             align_corners=None,  # must be none instead of False
@@ -163,7 +163,6 @@ class BundleParcDataset(Dataset):
                 np.float32)
 
         bundle_mask = bundle_labels > 0
-        bundle_labels[bundle_mask] += 1
 
         bundle_id = self.bundle_set.index(b)
         bundle_onehot = np.zeros((len(self.bundle_set)), dtype=np.float32)
@@ -176,7 +175,7 @@ class BundleParcDataset(Dataset):
             fodf_data = (fodf_data - mean) / std
 
         data_dict = {
-            'image': fodf_data, 'label': bundle_labels,
+            'image': fodf_data,
             'mask': bundle_mask
         }
 
@@ -187,18 +186,15 @@ class BundleParcDataset(Dataset):
             data_dict = self.zoom(data_dict)
             data_dict = self.resize(data_dict)
 
-        fodf_data, bundle_labels, bundle_mask = \
+        fodf_data, bundle_mask = \
             (data_dict['image'],
-             data_dict['label'],
              (data_dict['mask'] > 0.5).astype(bool))
-
-        bundle_labels *= bundle_mask
 
         if not self.is_test:
             fodf_data = self.gaussian(fodf_data)
             fodf_data = self.fod_down(fodf_data)
 
-        return fodf_data, prompt_data, bundle_labels
+        return fodf_data, prompt_data, bundle_mask
 
     def __del__(self):
         """ Close the hdf5 file

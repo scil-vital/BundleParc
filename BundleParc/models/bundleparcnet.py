@@ -410,7 +410,7 @@ class Head(nn.Module):
         super().__init__()
 
         self.conv = nn.Conv3d(
-            in_chans, 2, kernel_size=1, stride=1)
+            in_chans, 1, kernel_size=1, stride=1)
         # self.act = nn.Sigmoid()
 
         # Use Xavier initialisation for weights

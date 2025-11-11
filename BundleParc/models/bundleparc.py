@@ -56,7 +56,7 @@ class BundleParc(LightningModule):
         self.channels = channels
         self.n_bundles = len(self.bundles)
 
-        self.ce = BCELoss(reduction='none')
+        # self.ce = BCELoss(reduction='none')
         self.dice = DiceLoss(sigmoid=True, jaccard=False, squared_pred=True,
                              reduction='none', include_background=True)
 
@@ -127,47 +127,15 @@ class BundleParc(LightningModule):
         dice: torch.Tensor
             The dice loss of the model
         """
-
-        # Mask prediction
-        y_mask = y_pred[:, [0]]
-        # Mask for the cross-entropy
-        ce_mask = (y_true >= 1)
-        # Target for mask
-        y = ce_mask.to(int)
-
-        # If the reference mask is empty, it may cause NaNs
-        # which are painful to handle. Better to skip the loss
-        # computation altogether
-        loss_ce = torch.tensor(0, device=y_true.device)
-        if ce_mask.sum() > 0:
-            # Labels prediction
-            y_labels = y_pred[:, [1]]
-            # Target for labels. The target is the label - 1
-            # to project the labels from 1-2 to 0-1. The
-            # background is not considered in the loss and is
-            # clipped to 0.
-            y_ce = torch.clip(y_true[ce_mask] - 1, 0, 1)
-            y_hat_ce = y_labels[ce_mask]
-            # Compute the loss
-            # Deep supervision may cause downsampled volumes to have
-            # no truthy voxels. These cause NaNs which have to be removed.
-            # Note sure if there is a better way.
-            ce = self.ce(y_hat_ce, y_ce)
-            loss_ce = torch.nan_to_num(ce.nanmean())
-            assert not torch.isnan(loss_ce)
-
-        # Mask prediction
-        y_mask = y_pred[:, [0]]
-
-        dice = self.dice(y_mask, y)
+        dice = self.dice(y_pred, y_true)
         loss_dice = dice.mean()
-        return loss_ce, loss_dice
+        return loss_dice
 
     def mask_loss(self, y_pred, y_true):
         # First loss at full scale
-        ce, dice = self.loss(y_pred, y_true)
+        dice = self.loss(y_pred, y_true)
 
-        return ce, dice
+        return dice
 
     def forward(self, x, p) -> List[torch.Tensor]:
         """
@@ -196,14 +164,14 @@ class BundleParc(LightningModule):
         x_i, x_p, y = train_batch
 
         y_hat = self.forward(x_i, x_p)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y)
+        loss_dice = self.mask_loss(y_hat, y)
 
-        loss = loss_ce + loss_dice
+        loss = loss_dice
 
         self.log('train_loss', loss, on_step=False, on_epoch=True,
                  sync_dist=True)
-        self.log('train_loss_ce', loss_ce, on_step=False, on_epoch=True,
-                 sync_dist=True)
+        # self.log('train_loss_ce', loss_ce, on_step=False, on_epoch=True,
+        #          sync_dist=True)
         self.log('train_loss_dice', loss_dice, on_step=False, on_epoch=True,
                  sync_dist=True)
 
@@ -213,10 +181,10 @@ class BundleParc(LightningModule):
         x_i, x_p, y = val_batch
 
         y_hat = self.forward(x_i, x_p)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y)
-        loss = loss_ce + loss_dice
+        loss_dice = self.mask_loss(y_hat, y)
+        loss = loss_dice
 
-        preds = (F.sigmoid(y_hat[:, [0]]) > 0.5).int()
+        preds = (F.sigmoid(y_hat) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()
@@ -226,8 +194,8 @@ class BundleParc(LightningModule):
                  sync_dist=True)
         self.log('val_loss_dice', loss_dice, on_step=False, on_epoch=True,
                  sync_dist=True)
-        self.log('val_loss_ce', loss_ce, on_step=False, on_epoch=True,
-                 sync_dist=True)
+        # self.log('val_loss_ce', loss_ce, on_step=False, on_epoch=True,
+        #          sync_dist=True)
         self.log('val_dice', mean_dice, on_step=False, on_epoch=True,
                  sync_dist=True)
         self.log('val_iou', mean_iou, on_epoch=True, on_step=False,
@@ -237,10 +205,10 @@ class BundleParc(LightningModule):
         x_i, x_p, y = test_batch
 
         y_hat = self.forward(x_i, x_p)
-        loss_ce, loss_dice = self.mask_loss(y_hat, y)
-        loss = loss_ce + loss_dice
+        loss_dice = self.mask_loss(y_hat, y)
+        loss = loss_dice
 
-        preds = (F.sigmoid(y_hat[:, [0]]) > 0.5).int()
+        preds = (F.sigmoid(y_hat) > 0.5).int()
         y_mask = (y >= 1).int()
 
         mean_dice = self.dice_metric(preds, y_mask).mean()
@@ -250,8 +218,8 @@ class BundleParc(LightningModule):
                  sync_dist=True)
         self.log('test_loss_dice', loss_dice, on_step=False, on_epoch=True,
                  sync_dist=True)
-        self.log('test_loss_ce', loss_ce, on_step=False, on_epoch=True,
-                 sync_dist=True)
+        # self.log('test_loss_ce', loss_ce, on_step=False, on_epoch=True,
+        #          sync_dist=True)
         self.log('test_dice', mean_dice, on_step=False, on_epoch=True,
                  sync_dist=True)
         self.log('test_iou', mean_iou, on_epoch=True, on_step=False,
