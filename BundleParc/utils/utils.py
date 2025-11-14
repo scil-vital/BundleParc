@@ -35,7 +35,7 @@ def get_data(fodf, n_coefs):
     # Select the first n_coefs coefficients from the fodf data and put it in
     # the first dimension. This truncates the number of coefficients if there
     # are more than n_coefs.
-    input_fodf_data = fodf.get_fdata().transpose(
+    input_fodf_data = fodf.transpose(
         (3, 0, 1, 2))[:n_coefs, ...].astype(dtype=np.float32)
 
     # Shape of the input fODF data
