@@ -23,7 +23,7 @@ from BundleParc.utils.constants import TRACTSEG_BUNDLES
 
 
 def create_dataset(
-    subs, output_file, volume_size, nb_coeffs, dtype, bundles
+    subs, output_file, volume_size, nb_coeffs, dtype, bundles, compression
 ):
     """
     """
@@ -44,7 +44,7 @@ def create_dataset(
             progress.set_description(sub_id)
             # Get the path to the FODF volume
             fodf_file = join(
-                subject, f'{sub_id}__fodf.nii.gz')
+                subject, f'{sub_id}__fodf_descoteaux07.nii.gz')
 
             # Load the FODF volume
             fodf_img = nib.load(fodf_file)
@@ -66,7 +66,7 @@ def create_dataset(
 
             # Create a dataset for the FODF volume
             group.create_dataset('fodf', data=fodf_data[:nb_coeffs, ...],
-                                 compression='lzf', dtype=out_dtype)
+                                 compression=compression, dtype=out_dtype)
 
             # Create a dataset for the affine transformation matrix
             group.create_dataset('affine', data=affine)
@@ -100,7 +100,7 @@ def create_dataset(
 
                 bundle.create_dataset(
                     'labels', data=resampled_b_label.get_fdata(),
-                    compression='lzf', dtype=out_dtype)
+                    compression=compression, dtype=out_dtype)
 
 
 def main():
@@ -117,6 +117,9 @@ def main():
     parser.add_argument('--dtype', choices=['float16', 'float32'],
                         default='float32', type=str,
                         help='Cast data to this type before storing.')
+    parser.add_argument('--compression', type=str, default=None,
+                        choices=[None, 'gzip', 'lzf'],
+                        help='Compression algorithm to use in HDF5 file.')
     parser.add_argument('--force', action='store_true',
                         help='Overwrite output file if it exists.')
     parser.add_argument('--bundles', type=str, nargs='+',
@@ -139,7 +142,7 @@ def main():
 
     # Create the dataset
     create_dataset(args.subs, args.output_file, args.volume_size,
-                   n_coefs, args.dtype, args.bundles)
+                   n_coefs, args.dtype, args.bundles, args.compression)
 
 
 if __name__ == '__main__':

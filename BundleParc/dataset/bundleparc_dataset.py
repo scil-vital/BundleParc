@@ -208,7 +208,7 @@ class BundleParcDataset(Dataset):
         if not self.is_test:
             fodf_data = self.gaussian(fodf_data)
             fodf_data = self.fod_down(fodf_data)
-            fodf_data = self.sh_basis(fodf_data)
+            # fodf_data = self.sh_basis(fodf_data)
 
         return fodf_data, prompt_data, bundle_labels
 
